@@ -1,0 +1,787 @@
+{
+ "intro": "Place up to five models side by side. Every value comes from the gallery or from the publisher's config.json at the pinned revision. Where a source does not state a value, the cell says so instead of guessing.",
+ "diagramNote": "Simplified processing path from input text to the next predicted token. Blocks whose values differ between the selected models are outlined. Normalization placement (before, after or both around each sub-layer) is not stated in configuration files, so it is not drawn.",
+ "memoryNote": "Weights plus the attention cache for one session, before runtime overhead. Sliding-window layers stop growing at their window only where the configuration's layer split reproduces the gallery's published per-token figure; otherwise every token is counted at every attention layer, as the gallery does. Lines end at each model's configured context.",
+ "cacheNote": "Per-token figures are the gallery's, which count every attention layer at 16-bit precision. The long-range figure counts only the layers that keep growing past the sliding window.",
+ "memoryReferences": {
+  "cloud": "aws",
+  "instances": [
+   "p5.4xlarge",
+   "p5.48xlarge",
+   "p6-b200.48xlarge"
+  ]
+ },
+ "tableNote": "Rows marked as different have at least two stated values that disagree. Rows marked as partial have only one stated value, or agree where stated but are missing for some models.",
+ "groups": [
+  {
+   "id": "shape",
+   "name": "Overall shape"
+  },
+  {
+   "id": "attention",
+   "name": "Attention and position"
+  },
+  {
+   "id": "ffn",
+   "name": "Feed-forward and normalization"
+  },
+  {
+   "id": "output",
+   "name": "Output"
+  },
+  {
+   "id": "memory",
+   "name": "Context and memory"
+  },
+  {
+   "id": "governance",
+   "name": "Licence and inputs"
+  }
+ ],
+ "specs": [
+  {
+   "id": "family",
+   "name": "Decoder type",
+   "group": "shape",
+   "short": "Dense, mixture of experts, or hybrid.",
+   "plain": "Describes how much of the model works on each word. In a dense model every part works on every word. In a mixture-of-experts model a router sends each word to a few specialist blocks. In a hybrid model some layers swap attention for a cheaper running summary.",
+   "technical": [
+    "Dense: every token passes through every feed-forward weight in every layer, so active parameters equal total parameters.",
+    "Sparse mixture of experts (MoE): the feed-forward block is replaced by many expert networks and a learned router that selects the top-k experts per token. Compute per token follows the active parameters; memory follows the total.",
+    "Hybrid: some token-mixing layers use linear attention or state-space layers that keep a fixed-size state instead of a growing attention cache. Hybrid MoE combines both."
+   ],
+   "matters": "Memory and hardware are sized by total parameters; latency and cost per token follow active parameters. Hybrids reduce long-context memory but are newer, so check inference-engine support before committing.",
+   "configKeys": [
+    "num_experts / num_local_experts / n_routed_experts",
+    "layer_types",
+    "hybrid_override_pattern"
+   ],
+   "math": [
+    {
+     "label": "Active share",
+     "tex": "\\text{active share} = \\frac{N_{\\text{active}}}{N_{\\text{total}}}",
+     "note": "For a dense model the share is 1."
+    }
+   ],
+   "demo": "experts",
+   "sources": [
+    {
+     "title": "Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity (Fedus et al.)",
+     "url": "https://arxiv.org/abs/2101.03961"
+    },
+    {
+     "title": "Mamba: Linear-Time Sequence Modeling with Selective State Spaces (Gu and Dao)",
+     "url": "https://arxiv.org/abs/2312.00752"
+    }
+   ],
+   "related": [
+    "dense",
+    "sparse-moe",
+    "dense-hybrid",
+    "hybrid-moe"
+   ]
+  },
+  {
+   "id": "scale",
+   "name": "Parameters and weight memory",
+   "group": "shape",
+   "short": "How many learned numbers the model has, and how much memory they take.",
+   "plain": "Parameters are the learned numbers inside the model. The more there are, the more memory the model needs just to load. Storing each number with fewer bits (quantization) shrinks that memory, at some cost in quality.",
+   "technical": [
+    "Total parameters count every weight, including all experts. Active parameters count only those used for one token.",
+    "Weight memory is parameters multiplied by bytes per parameter: 2 bytes at 16-bit, 1 byte at 8-bit, about 0.5 bytes at 4-bit before scale overhead.",
+    "The published weight size is the sum of the official checkpoint files, so it reflects the precision the publisher shipped."
+   ],
+   "matters": "Weight memory sets the minimum hardware. A model that does not fit on one accelerator needs tensor or pipeline parallelism, which adds cost and operational risk.",
+   "configKeys": [
+    "safetensors metadata (total)",
+    "torch_dtype / dtype"
+   ],
+   "math": [
+    {
+     "label": "Weight memory",
+     "tex": "M_{\\text{weights}} = N_{\\text{total}} \\times b",
+     "note": "N_total is the parameter count and b the bytes per parameter."
+    }
+   ],
+   "sources": [
+    {
+     "title": "Efficient Memory Management for Large Language Model Serving with PagedAttention (Kwon et al.)",
+     "url": "https://arxiv.org/abs/2309.06180"
+    }
+   ]
+  },
+  {
+   "id": "vocab",
+   "name": "Tokenizer and vocabulary",
+   "group": "shape",
+   "short": "The set of text pieces the model reads and writes.",
+   "plain": "Before the model sees text, a tokenizer cuts it into pieces called tokens, such as whole words, word fragments or single bytes. The vocabulary is the full list of pieces it knows. Larger vocabularies cover more languages in fewer tokens.",
+   "technical": [
+    "Most of these models use subword tokenizers built with byte-pair encoding or a close variant, which merges frequent character sequences into single tokens.",
+    "Vocabulary size V sets the number of rows in the embedding matrix and the width of the output layer, so it adds V × d parameters at the input and, unless tied, again at the output.",
+    "A larger vocabulary usually means fewer tokens per document, which lowers cost per document and stretches the effective context."
+   ],
+   "matters": "Token counts drive price, latency and context use. Compare token counts for your own documents and languages across candidate tokenizers before comparing per-token prices.",
+   "configKeys": [
+    "vocab_size"
+   ],
+   "math": [
+    {
+     "label": "Embedding parameters",
+     "tex": "N_{\\text{embed}} = V \\times d",
+     "note": "V is the vocabulary size and d the embedding width."
+    }
+   ],
+   "sources": [
+    {
+     "title": "Neural Machine Translation of Rare Words with Subword Units (Sennrich et al.)",
+     "url": "https://arxiv.org/abs/1508.07909"
+    }
+   ]
+  },
+  {
+   "id": "embedding",
+   "name": "Embedding width (hidden size)",
+   "group": "shape",
+   "short": "How many numbers represent each token inside the model.",
+   "plain": "Each token is turned into a list of numbers, and that list is carried and updated through every layer. A wider list gives the model more room to represent meaning, and costs more memory and compute.",
+   "technical": [
+    "The hidden size d is the width of the residual stream: every layer reads a d-dimensional vector per token and adds its output back to it.",
+    "Attention projections and the feed-forward block scale with d, so per-layer parameters grow roughly with d squared.",
+    "Some models also give the embedding table or per-layer inputs a different width; the comparison shows the configured hidden_size."
+   ],
+   "matters": "Width and depth together set compute per token. Two models with similar parameter counts can trade width for depth, which changes latency on the same hardware.",
+   "configKeys": [
+    "hidden_size / d_model / n_embd"
+   ],
+   "math": [
+    {
+     "label": "Per-token state",
+     "tex": "\\mathbf{x}_t \\in \\mathbb{R}^{d}",
+     "note": "Every token carries one vector of length d through the residual stream."
+    }
+   ],
+   "sources": [
+    {
+     "title": "Attention Is All You Need (Vaswani et al.)",
+     "url": "https://arxiv.org/abs/1706.03762"
+    }
+   ]
+  },
+  {
+   "id": "layers",
+   "name": "Depth (number of layers)",
+   "group": "shape",
+   "short": "How many times the transformer block repeats.",
+   "plain": "The model applies the same kind of block over and over, each refining the result of the one before. The number of repeats is the depth.",
+   "technical": [
+    "Each layer has a token-mixing sub-layer (attention or a fixed-state alternative) and a feed-forward sub-layer, each wrapped with normalization and a residual connection.",
+    "Generating one token runs every layer in sequence, so depth adds directly to per-token latency.",
+    "The attention cache grows with the number of attention layers, not with fixed-state layers."
+   ],
+   "matters": "Deeper models are slower per token at the same width. In multi-GPU serving, depth is also how pipeline parallelism splits the model.",
+   "configKeys": [
+    "num_hidden_layers / n_layer / num_layers"
+   ],
+   "math": [
+    {
+     "label": "Layer update",
+     "tex": "\\mathbf{x}^{(\\ell+1)} = \\mathbf{x}^{(\\ell)} + f_\\ell\\big(\\mathbf{x}^{(\\ell)}\\big)",
+     "note": "Each of the L layers adds its output to the running vector."
+    }
+   ],
+   "sources": [
+    {
+     "title": "Attention Is All You Need (Vaswani et al.)",
+     "url": "https://arxiv.org/abs/1706.03762"
+    }
+   ]
+  },
+  {
+   "id": "residual",
+   "name": "Residual connections",
+   "group": "shape",
+   "short": "Each layer adds to the running result instead of replacing it.",
+   "plain": "Every layer writes a correction on top of what came in, rather than producing a fresh answer. This keeps information from earlier layers available and makes very deep models trainable.",
+   "technical": [
+    "The output of each sub-layer is added to its input: x + f(x). Gradients can flow straight through the addition during training.",
+    "In transformers the sum is called the residual stream; every attention and feed-forward block reads from it and writes back to it."
+   ],
+   "matters": "Residual connections are present in every model here, so they do not separate candidates. They explain why layer counts in the dozens or hundreds can be trained at all.",
+   "configKeys": [],
+   "math": [
+    {
+     "label": "Residual update",
+     "tex": "\\mathbf{y} = \\mathbf{x} + f(\\mathbf{x})",
+     "note": "f is the attention or feed-forward sub-layer."
+    }
+   ],
+   "sources": [
+    {
+     "title": "Deep Residual Learning for Image Recognition (He et al.)",
+     "url": "https://arxiv.org/abs/1512.03385"
+    }
+   ]
+  },
+  {
+   "id": "norm",
+   "name": "Normalization (RMSNorm, LayerNorm)",
+   "group": "ffn",
+   "short": "Rescales each token's numbers so training stays stable.",
+   "plain": "Before (and sometimes after) each sub-layer, the model rescales the numbers for each token to a standard size. Without this step, values can drift larger or smaller layer after layer and training breaks down.",
+   "technical": [
+    "LayerNorm subtracts the mean and divides by the standard deviation across the d features, then applies a learned scale and shift.",
+    "RMSNorm skips the mean subtraction and the shift: it divides by the root mean square and applies a learned scale. It is cheaper and is used by most recent models.",
+    "Pre-norm places normalization before each sub-layer and is the common choice for stable training of deep models. Some models also normalize sub-layer outputs. Configuration files name the norm through its epsilon key but do not state placement."
+   ],
+   "matters": "Norm choice rarely changes selection by itself, but it matters for fine-tuning and conversion tools, which must reproduce it exactly.",
+   "configKeys": [
+    "rms_norm_eps (RMSNorm)",
+    "layer_norm_epsilon / layer_norm_eps (LayerNorm)"
+   ],
+   "math": [
+    {
+     "label": "LayerNorm",
+     "tex": "\\mathrm{LN}(\\mathbf{x}) = \\gamma \\odot \\frac{\\mathbf{x} - \\mu}{\\sqrt{\\sigma^2 + \\epsilon}} + \\beta",
+     "note": "mu and sigma are the mean and standard deviation over the d features."
+    },
+    {
+     "label": "RMSNorm",
+     "tex": "\\mathrm{RMS}(\\mathbf{x}) = \\gamma \\odot \\frac{\\mathbf{x}}{\\sqrt{\\tfrac{1}{d}\\sum_i x_i^2 + \\epsilon}}",
+     "note": "No mean subtraction and no shift."
+    }
+   ],
+   "demo": "norm",
+   "sources": [
+    {
+     "title": "Layer Normalization (Ba et al.)",
+     "url": "https://arxiv.org/abs/1607.06450"
+    },
+    {
+     "title": "Root Mean Square Layer Normalization (Zhang and Sennrich)",
+     "url": "https://arxiv.org/abs/1910.07467"
+    },
+    {
+     "title": "On Layer Normalization in the Transformer Architecture (Xiong et al.)",
+     "url": "https://arxiv.org/abs/2002.04745"
+    }
+   ]
+  },
+  {
+   "id": "attention",
+   "name": "Attention type (MHA, GQA, MQA, MLA)",
+   "group": "attention",
+   "short": "How each token looks back at earlier tokens, and how much it stores to do so.",
+   "plain": "Attention lets each word look back at earlier words and pull in what is relevant. Each look-up uses several heads in parallel. The variants differ in how many separate key and value sets they keep, which sets the memory used per word of context.",
+   "technical": [
+    "Multi-head attention (MHA): every query head has its own key and value head.",
+    "Grouped-query attention (GQA): query heads are split into groups that share one key and value head, cutting the cache by the group size.",
+    "Multi-query attention (MQA): all query heads share a single key and value head.",
+    "Multi-head latent attention (MLA): keys and values are compressed into one low-rank latent vector per token, plus a small rotary part, and expanded when needed."
+   ],
+   "matters": "Attention type is the main driver of cache memory per token, which sets how many users or how much context fits on one accelerator.",
+   "configKeys": [
+    "num_attention_heads",
+    "num_key_value_heads",
+    "kv_lora_rank (MLA)"
+   ],
+   "math": [
+    {
+     "label": "Scaled dot-product attention",
+     "tex": "\\mathrm{Attn}(Q,K,V) = \\mathrm{softmax}\\!\\left(\\frac{QK^\\top}{\\sqrt{d_h}}\\right)V",
+     "note": "d_h is the head size."
+    },
+    {
+     "label": "Group size",
+     "tex": "g = \\frac{h_q}{h_{kv}}",
+     "note": "MHA has g = 1; MQA has h_kv = 1."
+    }
+   ],
+   "demo": "heads",
+   "sources": [
+    {
+     "title": "Attention Is All You Need (Vaswani et al.)",
+     "url": "https://arxiv.org/abs/1706.03762"
+    },
+    {
+     "title": "GQA: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints (Ainslie et al.)",
+     "url": "https://arxiv.org/abs/2305.13245"
+    },
+    {
+     "title": "Fast Transformer Decoding: One Write-Head is All You Need (Shazeer)",
+     "url": "https://arxiv.org/abs/1911.02150"
+    },
+    {
+     "title": "DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model",
+     "url": "https://arxiv.org/abs/2405.04434"
+    }
+   ],
+   "related": [
+    "mha",
+    "gqa",
+    "mla"
+   ]
+  },
+  {
+   "id": "headdim",
+   "name": "Head size",
+   "group": "attention",
+   "short": "How many numbers each attention head works with.",
+   "plain": "Each attention head compares words using its own short list of numbers. The head size is the length of that list.",
+   "technical": [
+    "Head size d_h is often hidden size divided by the number of query heads, but many recent configurations set head_dim explicitly to a different value.",
+    "Cache per token per layer is 2 × h_kv × d_h values, so head size enters the memory estimate directly.",
+    "Some models use different head sizes or key-value head counts on global and sliding-window layers."
+   ],
+   "matters": "Estimating cache from hidden size divided by heads understates memory for models that set a larger head_dim. The comparison uses the stated value where the configuration gives one.",
+   "configKeys": [
+    "head_dim",
+    "global_head_dim",
+    "swa_head_dim"
+   ],
+   "math": [
+    {
+     "label": "Default head size",
+     "tex": "d_h = \\frac{d}{h_q} \\quad \\text{unless head\\_dim is set}",
+     "note": "d is the hidden size and h_q the number of query heads."
+    }
+   ],
+   "sources": [
+    {
+     "title": "Attention Is All You Need (Vaswani et al.)",
+     "url": "https://arxiv.org/abs/1706.03762"
+    }
+   ],
+   "related": [
+    "gqa"
+   ]
+  },
+  {
+   "id": "qknorm",
+   "name": "QK-Norm",
+   "group": "attention",
+   "short": "Normalizes queries and keys before they are compared.",
+   "plain": "Before comparing words, the model rescales the query and key vectors. This stops the comparison scores from growing very large, which can derail training.",
+   "technical": [
+    "A normalization (usually RMSNorm) is applied to queries and keys per head before the dot product.",
+    "It bounds attention logits and was shown to stabilize training at large scale.",
+    "Few configuration files carry an explicit flag for it, so where the configuration is silent the comparison uses the gallery's description and labels it as such."
+   ],
+   "matters": "QK-Norm is a training-stability choice. It matters to teams continuing pre-training or fine-tuning with high learning rates, and to conversion tools that must reproduce it.",
+   "configKeys": [
+    "use_qk_norm",
+    "qk_norm",
+    "qk_layernorm"
+   ],
+   "math": [
+    {
+     "label": "Normalized logits",
+     "tex": "s_{ij} = \\frac{\\mathrm{Norm}(\\mathbf{q}_i)^\\top \\mathrm{Norm}(\\mathbf{k}_j)}{\\sqrt{d_h}}",
+     "note": "Applied per head."
+    }
+   ],
+   "sources": [
+    {
+     "title": "Scaling Vision Transformers to 22 Billion Parameters (Dehghani et al.)",
+     "url": "https://arxiv.org/abs/2302.05442"
+    }
+   ],
+   "related": [
+    "qknorm"
+   ]
+  },
+  {
+   "id": "position",
+   "name": "Position encoding (RoPE)",
+   "group": "attention",
+   "short": "How the model knows word order.",
+   "plain": "Attention on its own does not know which word came first. Rotary position encoding (RoPE) turns pairs of numbers in each query and key by an angle that depends on the word's position, so the comparison between two words depends on how far apart they are.",
+   "technical": [
+    "Feature pairs are rotated by angle m·θ_i, where m is the position and θ_i = base^(−2i/d_h). The base (rope_theta) sets the slowest rotation, and so the longest distance the encoding can tell apart.",
+    "Scaling methods such as YaRN, linear or Llama 3 style stretch the rotation so a model trained at one length can run at a longer one.",
+    "Partial rotary encoding rotates only a fraction of each head's features. In the p-RoPE formulation, p is the fraction of RoPE frequencies kept, with the lowest frequencies removed; p = 1 is standard RoPE and p = 0 has no position encoding.",
+    "Some models use a different base on sliding-window layers than on global layers."
+   ],
+   "matters": "Long-context claims depend on the position scheme and any scaling. A model run beyond its trained length, or with a scaling setting the inference engine does not reproduce, degrades quietly. Test at the lengths you will use.",
+   "configKeys": [
+    "rope_theta",
+    "rope_scaling / rope_parameters",
+    "partial_rotary_factor",
+    "rope_local_base_freq / swa_rope_theta"
+   ],
+   "math": [
+    {
+     "label": "Rotation frequency",
+     "tex": "\\theta_i = \\text{base}^{-2i/d_h}, \\quad i = 0,\\dots,\\tfrac{d_h}{2}-1",
+     "note": "Higher bases rotate more slowly."
+    },
+    {
+     "label": "Relative position",
+     "tex": "\\langle R_m \\mathbf{q}, R_n \\mathbf{k} \\rangle = \\langle \\mathbf{q}, R_{n-m} \\mathbf{k} \\rangle",
+     "note": "The score depends only on the distance n - m."
+    }
+   ],
+   "demo": "rope",
+   "sources": [
+    {
+     "title": "RoFormer: Enhanced Transformer with Rotary Position Embedding (Su et al.)",
+     "url": "https://arxiv.org/abs/2104.09864"
+    },
+    {
+     "title": "YaRN: Efficient Context Window Extension of Large Language Models (Peng et al.)",
+     "url": "https://arxiv.org/abs/2309.00071"
+    },
+    {
+     "title": "Round and Round We Go! What makes Rotary Positional Encodings useful? (Barbero et al.)",
+     "url": "https://arxiv.org/abs/2410.06205"
+    }
+   ],
+   "related": [
+    "position"
+   ]
+  },
+  {
+   "id": "window",
+   "name": "Sliding-window and global layers",
+   "group": "attention",
+   "short": "Some layers only look at recent words.",
+   "plain": "A global layer looks back over the whole conversation. A sliding-window layer only looks at the most recent few hundred or thousand words. Mixing many window layers with a few global ones keeps memory low while still connecting distant parts of the text.",
+   "technical": [
+    "A sliding-window layer attends to the previous W tokens, so its cache stops growing at W tokens.",
+    "Global (full) layers attend to every earlier token and keep growing with the context.",
+    "The layer recipe is the count of each kind. Gemma 3, for example, uses five local layers for every global layer with a 1,024-token window."
+   ],
+   "matters": "At long context, memory is dominated by global layers. Two models with the same per-token figure can differ several-fold at 128K tokens if one uses sliding windows.",
+   "configKeys": [
+    "layer_types",
+    "sliding_window",
+    "sliding_window_pattern"
+   ],
+   "math": [
+    {
+     "label": "Cache length per layer",
+     "tex": "n_\\ell = \\begin{cases} n & \\text{global} \\\\ \\min(n, W) & \\text{sliding window} \\end{cases}",
+     "note": "n is the context length and W the window."
+    }
+   ],
+   "demo": "mask",
+   "sources": [
+    {
+     "title": "Longformer: The Long-Document Transformer (Beltagy et al.)",
+     "url": "https://arxiv.org/abs/2004.05150"
+    },
+    {
+     "title": "Mistral 7B (Jiang et al.)",
+     "url": "https://arxiv.org/abs/2310.06825"
+    },
+    {
+     "title": "Gemma 3 Technical Report",
+     "url": "https://arxiv.org/abs/2503.19786"
+    }
+   ],
+   "related": [
+    "window"
+   ]
+  },
+  {
+   "id": "hybrid",
+   "name": "Fixed-state layers (linear attention, state-space)",
+   "group": "attention",
+   "short": "Layers that keep a running summary instead of a growing cache.",
+   "plain": "Some layers do not look back at every earlier word. They update a fixed-size summary as each word arrives, so their memory does not grow with the length of the text.",
+   "technical": [
+    "Linear attention, gated delta-rule layers and state-space layers such as Mamba replace the softmax over all earlier tokens with a recurrent state of fixed size.",
+    "Hybrid models interleave these layers with a smaller number of full-attention layers that keep exact recall.",
+    "Only the attention layers count towards the growing cache."
+   ],
+   "matters": "Hybrids cut long-context memory substantially. Support in inference engines and fine-tuning tools is less uniform than for standard attention, so confirm it for your stack.",
+   "configKeys": [
+    "layer_types",
+    "hybrid_override_pattern",
+    "linear_attn_config"
+   ],
+   "math": [
+    {
+     "label": "Recurrent state",
+     "tex": "S_t = A_t S_{t-1} + B_t \\mathbf{x}_t, \\quad \\mathbf{y}_t = C_t S_t",
+     "note": "The state S has a fixed size regardless of t."
+    }
+   ],
+   "sources": [
+    {
+     "title": "Mamba: Linear-Time Sequence Modeling with Selective State Spaces (Gu and Dao)",
+     "url": "https://arxiv.org/abs/2312.00752"
+    }
+   ],
+   "related": [
+    "linear",
+    "statespace",
+    "recurrent"
+   ]
+  },
+  {
+   "id": "ffn",
+   "name": "Feed-forward block and activation",
+   "group": "ffn",
+   "short": "The per-token network in every layer.",
+   "plain": "After attention mixes information between words, each word goes through a small network on its own. Most of a model's parameters sit here. The activation is the bend in that network that lets it learn non-linear patterns.",
+   "technical": [
+    "The block expands each token from d to an intermediate width, applies an activation, and projects back to d.",
+    "Most recent models use a gated form (SwiGLU or GeGLU): two projections, one passed through the activation, multiplied element by element.",
+    "Configurations name the activation (silu, gelu and variants) and the width, but do not always state whether the block is gated."
+   ],
+   "matters": "The intermediate width is the largest single driver of parameter count in dense models. For MoE models, the per-expert width times the active expert count sets compute per token.",
+   "configKeys": [
+    "intermediate_size",
+    "moe_intermediate_size",
+    "hidden_act / hidden_activation"
+   ],
+   "math": [
+    {
+     "label": "Gated feed-forward",
+     "tex": "\\mathrm{FFN}(\\mathbf{x}) = W_2\\big(\\phi(W_1\\mathbf{x}) \\odot W_3\\mathbf{x}\\big)",
+     "note": "phi is the activation, such as SiLU for SwiGLU or GELU for GeGLU."
+    }
+   ],
+   "demo": "activation",
+   "sources": [
+    {
+     "title": "GLU Variants Improve Transformer (Shazeer)",
+     "url": "https://arxiv.org/abs/2002.05202"
+    }
+   ],
+   "related": [
+    "dense"
+   ]
+  },
+  {
+   "id": "moe",
+   "name": "Mixture of experts",
+   "group": "ffn",
+   "short": "Many feed-forward experts, a few used per token.",
+   "plain": "Instead of one feed-forward network, the layer holds many, called experts. A small router picks a few for each word. The model has the knowledge capacity of all experts but the per-word cost of only the chosen few.",
+   "technical": [
+    "A router scores each expert for the token; the top-k are run and their outputs combined, weighted by the router scores.",
+    "Some models add shared experts that every token uses, and keep the first few layers dense.",
+    "All experts must be in memory even though only k are used per token."
+   ],
+   "matters": "MoE gives high quality per unit of compute but needs memory for every expert. Serving at scale often needs expert parallelism, which affects which platforms and engines can host the model.",
+   "configKeys": [
+    "num_experts / n_routed_experts",
+    "num_experts_per_tok",
+    "n_shared_experts",
+    "first_k_dense_replace"
+   ],
+   "math": [
+    {
+     "label": "Routed output",
+     "tex": "\\mathbf{y} = \\sum_{i \\in \\mathrm{TopK}(\\mathbf{r}(\\mathbf{x}))} g_i(\\mathbf{x})\\, E_i(\\mathbf{x})",
+     "note": "r is the router, g the gate weights and E_i the experts."
+    }
+   ],
+   "demo": "experts",
+   "sources": [
+    {
+     "title": "Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer (Shazeer et al.)",
+     "url": "https://arxiv.org/abs/1701.06538"
+    },
+    {
+     "title": "Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity (Fedus et al.)",
+     "url": "https://arxiv.org/abs/2101.03961"
+    }
+   ],
+   "related": [
+    "moe",
+    "sparse-moe"
+   ]
+  },
+  {
+   "id": "output",
+   "name": "Output layer, tied embeddings and soft-capping",
+   "group": "output",
+   "short": "How the final vector becomes a choice of next token.",
+   "plain": "At the end, the model scores every token in its vocabulary and picks the next one from those scores. Some models reuse the input embedding table for this step, which saves parameters. Some also squash extreme scores so no single score runs away.",
+   "technical": [
+    "A final normalization is followed by a linear layer of size d × V that produces one logit per vocabulary entry; softmax turns logits into probabilities.",
+    "Tied embeddings reuse the input embedding matrix as the output layer, saving V × d parameters. The share saved is largest in small models with large vocabularies.",
+    "Logit soft-capping passes logits through c·tanh(x / c), keeping them between −c and +c. Gemma 2 caps attention logits at 50 and final logits at 30."
+   ],
+   "matters": "Tying changes parameter counts and how fine-tuning updates the vocabulary. Soft-capping must be reproduced by the inference engine, or outputs differ from the publisher's reference.",
+   "configKeys": [
+    "tie_word_embeddings",
+    "final_logit_softcapping",
+    "attn_logit_softcapping"
+   ],
+   "math": [
+    {
+     "label": "Next-token probabilities",
+     "tex": "p(\\cdot \\mid \\mathbf{x}) = \\mathrm{softmax}(W_{\\text{out}}\\,\\mathbf{h})",
+     "note": "With tied embeddings, W_out is the embedding matrix."
+    },
+    {
+     "label": "Soft-capping",
+     "tex": "z \\leftarrow c \\cdot \\tanh(z / c)",
+     "note": "c is the cap."
+    }
+   ],
+   "demo": "softcap",
+   "sources": [
+    {
+     "title": "Using the Output Embedding to Improve Language Models (Press and Wolf)",
+     "url": "https://arxiv.org/abs/1608.05859"
+    },
+    {
+     "title": "Gemma 2: Improving Open Language Models at a Practical Size",
+     "url": "https://arxiv.org/abs/2408.00118"
+    }
+   ]
+  },
+  {
+   "id": "mtp",
+   "name": "Multi-token prediction",
+   "group": "output",
+   "short": "Extra heads that predict tokens further ahead.",
+   "plain": "Besides the next word, some models are trained to predict the word after that too. The extra predictor can speed up generation by proposing several words that the main model then checks.",
+   "technical": [
+    "Additional modules predict tokens at offsets beyond the next one, adding training signal.",
+    "At inference they can serve as a built-in draft model for speculative decoding, or be discarded.",
+    "The configuration states how many such modules the checkpoint carries."
+   ],
+   "matters": "Built-in draft modules can raise throughput without a separate draft model, if the inference engine supports them. They add a little to checkpoint size.",
+   "configKeys": [
+    "num_nextn_predict_layers",
+    "mtp_num_hidden_layers"
+   ],
+   "math": [
+    {
+     "label": "Training objective",
+     "tex": "\\mathcal{L} = -\\sum_t \\sum_{k=1}^{K} \\log p_k(x_{t+k} \\mid x_{\\le t})",
+     "note": "K is the number of future tokens predicted."
+    }
+   ],
+   "sources": [
+    {
+     "title": "Better & Faster Large Language Models via Multi-token Prediction (Gloeckle et al.)",
+     "url": "https://arxiv.org/abs/2404.19737"
+    }
+   ],
+   "related": [
+    "mtp"
+   ]
+  },
+  {
+   "id": "context",
+   "name": "Context length",
+   "group": "memory",
+   "short": "The longest input plus output the model is configured for.",
+   "plain": "The context is how much text the model can consider at once, counted in tokens. It includes the instructions, any documents and the answer being written.",
+   "technical": [
+    "The configured limit comes from max_position_embeddings or the gallery's stated context; scaling settings may extend it beyond the trained length.",
+    "Attention cache memory grows with the context actually used, not with the configured limit.",
+    "Quality at long range depends on training and position scaling, and is not guaranteed by the configured limit."
+   ],
+   "matters": "Size hardware for the context you will actually use, and test retrieval and reasoning at that length before relying on a long-context claim.",
+   "configKeys": [
+    "max_position_embeddings"
+   ],
+   "math": [
+    {
+     "label": "Cache at length n",
+     "tex": "M_{\\text{cache}}(n) = n \\times m_{\\text{token}}",
+     "note": "m_token is the cache per token; sliding-window layers cap their share at the window."
+    }
+   ],
+   "sources": [
+    {
+     "title": "YaRN: Efficient Context Window Extension of Large Language Models (Peng et al.)",
+     "url": "https://arxiv.org/abs/2309.00071"
+    }
+   ]
+  },
+  {
+   "id": "cache",
+   "name": "Attention (KV) cache",
+   "group": "memory",
+   "short": "Memory kept for every token of context, per user.",
+   "plain": "While writing, the model keeps a note of every earlier word's keys and values so it does not recompute them. That note grows with every word and is kept separately for each conversation. At long context it can exceed the model weights.",
+   "technical": [
+    "Each attention layer stores a key and a value vector per key-value head per token: 2 × h_kv × d_h numbers.",
+    "MLA stores one compressed latent of rank r plus a small rotary part instead of full keys and values.",
+    "Sliding-window layers store at most W tokens; fixed-state layers store a constant-size state.",
+    "The cache is held per concurrent session, so total cache scales with users × context."
+   ],
+   "matters": "Cache, not weights, usually limits how many concurrent users one accelerator serves. Paged allocation in modern engines reduces waste but not the per-token requirement.",
+   "configKeys": [
+    "num_key_value_heads",
+    "head_dim",
+    "kv_lora_rank",
+    "qk_rope_head_dim",
+    "layer_types"
+   ],
+   "math": [
+    {
+     "label": "Per token, standard attention",
+     "tex": "m_{\\text{token}} = \\sum_{\\ell \\in \\text{attn}} 2 \\, h_{kv} \\, d_h \\, b",
+     "note": "b is bytes per value, 2 at 16-bit."
+    },
+    {
+     "label": "Per token, latent attention",
+     "tex": "m_{\\text{token}} = \\sum_{\\ell} (r + d_{\\text{rope}}) \\, b",
+     "note": "r is the latent rank."
+    }
+   ],
+   "demo": "cache",
+   "sources": [
+    {
+     "title": "Efficient Memory Management for Large Language Model Serving with PagedAttention (Kwon et al.)",
+     "url": "https://arxiv.org/abs/2309.06180"
+    },
+    {
+     "title": "DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model",
+     "url": "https://arxiv.org/abs/2405.04434"
+    }
+   ],
+   "related": [
+    "gqa",
+    "mla",
+    "window"
+   ]
+  },
+  {
+   "id": "licence",
+   "name": "Licence and release",
+   "group": "governance",
+   "short": "What you may do with the weights, and when they were published.",
+   "plain": "The licence sets whether you may use the model commercially and what you must do in return, such as attribution or usage limits. The release date helps judge how current the model is.",
+   "technical": [
+    "Licences here are read from the official repository and summarized in plain language in the licence rules file; they are not legal advice.",
+    "Some licences add revenue or user thresholds, regional exclusions or restrictions on using outputs to train other models."
+   ],
+   "matters": "A technically superior model is unusable if its licence blocks your use. Confirm the licence text with counsel before deployment.",
+   "configKeys": [
+    "license (repository metadata)"
+   ],
+   "math": [],
+   "sources": []
+  },
+  {
+   "id": "inputs",
+   "name": "Input types",
+   "group": "governance",
+   "short": "Text only, or also images and audio.",
+   "plain": "Some checkpoints include encoders for images or audio alongside the text decoder. The comparison shows what the official configuration includes.",
+   "technical": [
+    "Vision or audio support is read from the presence of vision or audio sections in the official configuration.",
+    "The decoder comparison covers the text decoder only; encoders for other inputs are not drawn."
+   ],
+   "matters": "Multimodal checkpoints are larger and may need different serving support. If you only need text, a text-only checkpoint is simpler to host.",
+   "configKeys": [
+    "vision_config",
+    "audio_config"
+   ],
+   "math": [],
+   "sources": []
+  }
+ ]
+}

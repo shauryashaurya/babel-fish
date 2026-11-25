@@ -1,0 +1,17 @@
+{
+ "retrievedOn": "2026-11-24",
+ "basis": "Memory size and memory bandwidth as stated on each vendor's official product page. Devices whose vendor page does not state memory bandwidth are not listed.",
+ "devices": [
+  {"id": "jetson-orin-nano-super", "name": "NVIDIA Jetson Orin Nano Super Developer Kit", "kind": "edge", "memoryGB": 8, "bandwidthGBs": 102, "unified": true, "source": "https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-orin/nano-super-developer-kit/"},
+  {"id": "jetson-agx-orin-64", "name": "NVIDIA Jetson AGX Orin 64GB", "kind": "edge", "memoryGB": 64, "bandwidthGBs": 204.8, "unified": true, "source": "https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-orin/"},
+  {"id": "macbook-pro-m6-32", "name": "MacBook Pro 14-inch, M6, 32GB", "kind": "laptop", "memoryGB": 32, "bandwidthGBs": 170, "unified": true, "source": "https://www.apple.com/macbook-pro/specs/"},
+  {"id": "macbook-pro-m5-pro-64", "name": "MacBook Pro, M5 Pro, 64GB", "kind": "laptop", "memoryGB": 64, "bandwidthGBs": 307, "unified": true, "source": "https://www.apple.com/macbook-pro/specs/"},
+  {"id": "macbook-pro-m5-max-128", "name": "MacBook Pro, M5 Max (40-core GPU), 128GB", "kind": "laptop", "memoryGB": 128, "bandwidthGBs": 614, "unified": true, "source": "https://www.apple.com/macbook-pro/specs/"},
+  {"id": "dgx-spark", "name": "NVIDIA DGX Spark", "kind": "desktop", "memoryGB": 128, "bandwidthGBs": 273, "unified": true, "source": "https://www.nvidia.com/en-us/products/workstations/dgx-spark/"},
+  {"id": "l4", "name": "NVIDIA L4", "kind": "datacenter", "memoryGB": 24, "bandwidthGBs": 300, "unified": false, "source": "https://www.nvidia.com/en-us/data-center/l4/"},
+  {"id": "l40s", "name": "NVIDIA L40S", "kind": "datacenter", "memoryGB": 48, "bandwidthGBs": 864, "unified": false, "source": "https://www.nvidia.com/en-us/data-center/l40s/"},
+  {"id": "rtx-pro-6000-server", "name": "NVIDIA RTX PRO 6000 Blackwell Server Edition", "kind": "datacenter", "memoryGB": 96, "bandwidthGBs": 1597, "unified": false, "source": "https://www.nvidia.com/en-us/data-center/rtx-pro-6000-blackwell-server-edition/"},
+  {"id": "h100-sxm", "name": "NVIDIA H100 SXM", "kind": "datacenter", "memoryGB": 80, "bandwidthGBs": 3350, "unified": false, "source": "https://www.nvidia.com/en-us/data-center/h100/"},
+  {"id": "h200", "name": "NVIDIA H200", "kind": "datacenter", "memoryGB": 141, "bandwidthGBs": 4800, "unified": false, "source": "https://www.nvidia.com/en-us/data-center/h200/"}
+ ]
+}

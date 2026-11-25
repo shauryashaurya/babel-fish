@@ -1,0 +1,91 @@
+{
+  "retrievedOn": "2026-11-24",
+  "basis": "GPU counts, GPU memory, vCPUs and system memory are taken from each provider's official documentation. Regional availability, quotas and prices are not included.",
+  "profiles": {
+    "minimum": {"sessions": 1, "contextTokens": 32768, "headroomPct": 10},
+    "recommended": {"sessions": 4, "headroomPct": 25}
+  },
+  "gpuFormats": {
+    "ada": [],
+    "hopper": ["fp8"],
+    "blackwell": ["fp8", "fp4"]
+  },
+  "formatSources": [
+    {"title": "NVIDIA Hopper architecture (FP8)", "url": "https://www.nvidia.com/en-us/data-center/technologies/hopper-architecture/"},
+    {"title": "NVIDIA Blackwell architecture (FP4)", "url": "https://www.nvidia.com/en-us/data-center/technologies/blackwell-architecture/"}
+  ],
+  "clouds": [
+    {
+      "id": "aws",
+      "name": "AWS",
+      "sources": [{"title": "Amazon EC2 accelerated computing specifications", "url": "https://docs.aws.amazon.com/ec2/latest/instancetypes/ac.html"}],
+      "instances": [
+        {"name": "g6.xlarge", "gpu": "L4", "gpus": 1, "gpuMemoryGiB": 22, "vcpus": 4, "ramGiB": 16, "arch": "ada"},
+        {"name": "g6.4xlarge", "gpu": "L4", "gpus": 1, "gpuMemoryGiB": 22, "vcpus": 16, "ramGiB": 64, "arch": "ada"},
+        {"name": "g6e.xlarge", "gpu": "L40S", "gpus": 1, "gpuMemoryGiB": 44, "vcpus": 4, "ramGiB": 32, "arch": "ada"},
+        {"name": "g6e.4xlarge", "gpu": "L40S", "gpus": 1, "gpuMemoryGiB": 44, "vcpus": 16, "ramGiB": 128, "arch": "ada"},
+        {"name": "p5.4xlarge", "gpu": "H100", "gpus": 1, "gpuMemoryGiB": 80, "vcpus": 16, "ramGiB": 256, "arch": "hopper"},
+        {"name": "g7e.2xlarge", "gpu": "RTX PRO Server 6000", "gpus": 1, "gpuMemoryGiB": 96, "vcpus": 8, "ramGiB": 64, "arch": "blackwell"},
+        {"name": "g7e.4xlarge", "gpu": "RTX PRO Server 6000", "gpus": 1, "gpuMemoryGiB": 96, "vcpus": 16, "ramGiB": 128, "arch": "blackwell"},
+        {"name": "g6e.12xlarge", "gpu": "L40S", "gpus": 4, "gpuMemoryGiB": 178, "vcpus": 48, "ramGiB": 384, "arch": "ada"},
+        {"name": "g7e.12xlarge", "gpu": "RTX PRO Server 6000", "gpus": 2, "gpuMemoryGiB": 192, "vcpus": 48, "ramGiB": 512, "arch": "blackwell"},
+        {"name": "g6e.48xlarge", "gpu": "L40S", "gpus": 8, "gpuMemoryGiB": 357, "vcpus": 192, "ramGiB": 1536, "arch": "ada"},
+        {"name": "g7e.24xlarge", "gpu": "RTX PRO Server 6000", "gpus": 4, "gpuMemoryGiB": 384, "vcpus": 96, "ramGiB": 1024, "arch": "blackwell"},
+        {"name": "p5.48xlarge", "gpu": "H100", "gpus": 8, "gpuMemoryGiB": 640, "vcpus": 192, "ramGiB": 2048, "arch": "hopper"},
+        {"name": "p6e-gb200.36xlarge", "gpu": "GB200", "gpus": 4, "gpuMemoryGiB": 740, "vcpus": 144, "ramGiB": 960, "arch": "blackwell"},
+        {"name": "g7e.48xlarge", "gpu": "RTX PRO Server 6000", "gpus": 8, "gpuMemoryGiB": 768, "vcpus": 192, "ramGiB": 2048, "arch": "blackwell"},
+        {"name": "p5en.48xlarge", "gpu": "H200", "gpus": 8, "gpuMemoryGiB": 1128, "vcpus": 192, "ramGiB": 2048, "arch": "hopper"},
+        {"name": "p6-b200.48xlarge", "gpu": "B200", "gpus": 8, "gpuMemoryGiB": 1432, "vcpus": 192, "ramGiB": 2048, "arch": "blackwell"},
+        {"name": "p6-b300.48xlarge", "gpu": "B300", "gpus": 8, "gpuMemoryGiB": 2148, "vcpus": 192, "ramGiB": 4096, "arch": "blackwell"}
+      ]
+    },
+    {
+      "id": "gcp",
+      "name": "Google Cloud",
+      "sources": [{"title": "Compute Engine accelerator-optimized machines", "url": "https://cloud.google.com/compute/docs/accelerator-optimized-machines"}],
+      "instances": [
+        {"name": "g2-standard-4", "gpu": "L4", "gpus": 1, "gpuMemoryGiB": 24, "vcpus": 4, "ramGiB": 16, "arch": "ada"},
+        {"name": "g2-standard-16", "gpu": "L4", "gpus": 1, "gpuMemoryGiB": 24, "vcpus": 16, "ramGiB": 64, "arch": "ada"},
+        {"name": "g2-standard-24", "gpu": "L4", "gpus": 2, "gpuMemoryGiB": 48, "vcpus": 24, "ramGiB": 96, "arch": "ada"},
+        {"name": "a3-highgpu-1g", "gpu": "H100", "gpus": 1, "gpuMemoryGiB": 80, "vcpus": 26, "ramGiB": 234, "arch": "hopper"},
+        {"name": "g2-standard-48", "gpu": "L4", "gpus": 4, "gpuMemoryGiB": 96, "vcpus": 48, "ramGiB": 192, "arch": "ada"},
+        {"name": "g4-standard-48", "gpu": "RTX PRO 6000", "gpus": 1, "gpuMemoryGiB": 96, "vcpus": 48, "ramGiB": 180, "arch": "blackwell"},
+        {"name": "a3-highgpu-2g", "gpu": "H100", "gpus": 2, "gpuMemoryGiB": 160, "vcpus": 52, "ramGiB": 468, "arch": "hopper"},
+        {"name": "g2-standard-96", "gpu": "L4", "gpus": 8, "gpuMemoryGiB": 192, "vcpus": 96, "ramGiB": 384, "arch": "ada"},
+        {"name": "g4-standard-96", "gpu": "RTX PRO 6000", "gpus": 2, "gpuMemoryGiB": 192, "vcpus": 96, "ramGiB": 360, "arch": "blackwell"},
+        {"name": "a3-highgpu-4g", "gpu": "H100", "gpus": 4, "gpuMemoryGiB": 320, "vcpus": 104, "ramGiB": 936, "arch": "hopper"},
+        {"name": "g4-standard-192", "gpu": "RTX PRO 6000", "gpus": 4, "gpuMemoryGiB": 384, "vcpus": 192, "ramGiB": 720, "arch": "blackwell"},
+        {"name": "a3-highgpu-8g", "gpu": "H100", "gpus": 8, "gpuMemoryGiB": 640, "vcpus": 208, "ramGiB": 1872, "arch": "hopper"},
+        {"name": "a4x-highgpu-4g", "gpu": "GB200", "gpus": 4, "gpuMemoryGiB": 744, "vcpus": 140, "ramGiB": 884, "arch": "blackwell"},
+        {"name": "g4-standard-384", "gpu": "RTX PRO 6000", "gpus": 8, "gpuMemoryGiB": 768, "vcpus": 384, "ramGiB": 1440, "arch": "blackwell"},
+        {"name": "a4x-maxgpu-4g-metal", "gpu": "GB300", "gpus": 4, "gpuMemoryGiB": 1116, "vcpus": 144, "ramGiB": 960, "arch": "blackwell"},
+        {"name": "a3-ultragpu-8g", "gpu": "H200", "gpus": 8, "gpuMemoryGiB": 1128, "vcpus": 224, "ramGiB": 2952, "arch": "hopper"},
+        {"name": "a4-highgpu-8g", "gpu": "B200", "gpus": 8, "gpuMemoryGiB": 1440, "vcpus": 224, "ramGiB": 3968, "arch": "blackwell"}
+      ]
+    },
+    {
+      "id": "azure",
+      "name": "Azure",
+      "sources": [
+        {"title": "NC RTX PRO 6000 BSE v6 series", "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/gpu-accelerated/nc-rtxpro6000-bse-v6-series"},
+        {"title": "NCads H100 v5 series", "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/gpu-accelerated/ncadsh100v5-series"},
+        {"title": "ND H100 v5 series", "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/gpu-accelerated/ndh100v5-series"},
+        {"title": "ND H200 v5 series", "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/gpu-accelerated/nd-h200-v5-series"},
+        {"title": "ND GB200 v6 series", "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/gpu-accelerated/nd-gb200-v6-series"},
+        {"title": "ND GB300 v6 series", "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/gpu-accelerated/nd-gb300-v6-series"}
+      ],
+      "instances": [
+        {"name": "Standard_NC36ds_xl_RTXPRO6000BSE_v6", "gpu": "RTX PRO 6000 (1/4)", "gpus": 0.25, "gpuMemoryGiB": 24, "vcpus": 36, "ramGiB": 132, "arch": "blackwell", "fractional": true},
+        {"name": "Standard_NC72ds_xl_RTXPRO6000BSE_v6", "gpu": "RTX PRO 6000 (1/2)", "gpus": 0.5, "gpuMemoryGiB": 48, "vcpus": 72, "ramGiB": 264, "arch": "blackwell", "fractional": true},
+        {"name": "Standard_NC40ads_H100_v5", "gpu": "H100", "gpus": 1, "gpuMemoryGiB": 94, "vcpus": 40, "ramGiB": 320, "arch": "hopper"},
+        {"name": "Standard_NC144ds_xl_RTXPRO6000BSE_v6", "gpu": "RTX PRO 6000", "gpus": 1, "gpuMemoryGiB": 96, "vcpus": 144, "ramGiB": 516, "arch": "blackwell"},
+        {"name": "Standard_NC80adis_H100_v5", "gpu": "H100", "gpus": 2, "gpuMemoryGiB": 188, "vcpus": 80, "ramGiB": 640, "arch": "hopper"},
+        {"name": "Standard_NC288ds_xl_RTXPRO6000BSE_v6", "gpu": "RTX PRO 6000", "gpus": 2, "gpuMemoryGiB": 192, "vcpus": 288, "ramGiB": 1032, "arch": "blackwell"},
+        {"name": "Standard_ND96isr_H100_v5", "gpu": "H100", "gpus": 8, "gpuMemoryGiB": 640, "vcpus": 96, "ramGiB": 1900, "arch": "hopper"},
+        {"name": "Standard_ND128isr_NDR_GB200_v6", "gpu": "GB200", "gpus": 4, "gpuMemoryGiB": 768, "vcpus": 128, "ramGiB": 900, "arch": "blackwell"},
+        {"name": "Standard_ND96isr_H200_v5", "gpu": "H200", "gpus": 8, "gpuMemoryGiB": 1128, "vcpus": 96, "ramGiB": 1850, "arch": "hopper"},
+        {"name": "Standard_ND128isr_GB300_v6", "gpu": "GB300", "gpus": 4, "gpuMemoryGiB": 1152, "vcpus": 128, "ramGiB": 864, "arch": "blackwell"}
+      ]
+    }
+  ]
+}

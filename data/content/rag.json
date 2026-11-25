@@ -1,0 +1,1990 @@
+{
+ "intro": {
+  "what": "Retrieval-augmented generation (RAG) finds relevant passages in your own documents at the moment a question is asked and gives them to the model with the question, so the answer can be based on, and cite, your sources.",
+  "analogy": "Fine-tuning changes what the model has memorized. RAG is an open-book exam: the model keeps the same knowledge, but it is handed the right pages before it answers.",
+  "goodFor": [
+   "Knowledge that changes often",
+   "Answers that must cite a source",
+   "Large document collections no prompt could hold",
+   "Information that only some users may see, if retrieval enforces permissions"
+  ],
+  "badFor": [
+   "Changing the model's style or output format, which is a fine-tuning or prompting problem",
+   "Questions whose answer is not written anywhere in the documents",
+   "Reasoning the model cannot do even with the right passage in front of it"
+  ],
+  "source": {
+   "title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+   "url": "https://arxiv.org/abs/2005.11401"
+  }
+ },
+ "pipeline": [
+  {
+   "id": "ingest",
+   "title": "Ingest and parse",
+   "side": "index",
+   "what": "Convert source files into clean text, keeping structure such as headings, tables and page numbers, plus metadata such as owner, date and access rights.",
+   "decide": [
+    "Which sources are authoritative",
+    "How tables, scans and images are handled",
+    "Which metadata travels with each passage"
+   ],
+   "fails": "Content that is never ingested can never be retrieved, and the model may answer anyway."
+  },
+  {
+   "id": "chunk",
+   "title": "Split into chunks",
+   "side": "index",
+   "what": "Cut documents into passages small enough to retrieve precisely and large enough to make sense on their own.",
+   "decide": [
+    "Chunk size and overlap",
+    "Split by tokens, sentences or document sections",
+    "Whether each chunk carries its document title or a short context"
+   ],
+   "fails": "A chunk that cuts an answer in half may be retrieved without the half that matters."
+  },
+  {
+   "id": "index",
+   "title": "Embed and index",
+   "side": "index",
+   "what": "Store each chunk in one or more indexes: a keyword index, a vector index of embeddings, or a graph of entities and relations.",
+   "decide": [
+    "Which embedding model and dimension",
+    "Keyword, vector or both",
+    "How updates and deletions reach the index"
+   ],
+   "fails": "An embedding model that does not know your vocabulary places related passages far apart."
+  },
+  {
+   "id": "query",
+   "title": "Understand the query",
+   "side": "query",
+   "what": "Optionally rewrite, expand or split the user's question before searching.",
+   "decide": [
+    "Rewrite into a search-friendly form",
+    "Generate several queries",
+    "Route simple and complex questions differently"
+   ],
+   "fails": "Short or ambiguous questions retrieve generic passages."
+  },
+  {
+   "id": "retrieve",
+   "title": "Retrieve candidates",
+   "side": "query",
+   "what": "Search the indexes and collect the top candidates, filtered by the user's permissions and any metadata constraints.",
+   "decide": [
+    "How many candidates (k)",
+    "How results from several indexes are merged",
+    "Which permission filters apply"
+   ],
+   "fails": "The right passage exists but ranks below the cut-off."
+  },
+  {
+   "id": "rerank",
+   "title": "Rerank and filter",
+   "side": "query",
+   "what": "Score each candidate against the question with a more accurate but slower model, and keep the best few.",
+   "decide": [
+    "Reranker model",
+    "How many passages reach the prompt",
+    "Whether to drop passages below a score"
+   ],
+   "fails": "Too many weak passages dilute the context and can mislead the model."
+  },
+  {
+   "id": "assemble",
+   "title": "Assemble the prompt",
+   "side": "query",
+   "what": "Place the selected passages, their source labels and the question into the prompt, with instructions to answer only from them and to cite.",
+   "decide": [
+    "Order of passages",
+    "How sources are labelled",
+    "What to do when nothing relevant is found"
+   ],
+   "fails": "Models use information at the start and end of long inputs better than in the middle.",
+   "source": {
+    "title": "Lost in the Middle: How Language Models Use Long Contexts",
+    "url": "https://arxiv.org/abs/2307.03172"
+   }
+  },
+  {
+   "id": "generate",
+   "title": "Generate with citations",
+   "side": "query",
+   "what": "The model writes the answer and points to the passages it used.",
+   "decide": [
+    "Citation format",
+    "Whether to refuse when evidence is missing",
+    "Whether to check claims against the passages afterwards"
+   ],
+   "fails": "The answer can still contain claims that no passage supports."
+  },
+  {
+   "id": "monitor",
+   "title": "Evaluate and monitor",
+   "side": "ops",
+   "what": "Measure retrieval and answers separately, on a fixed test set and on live traffic.",
+   "decide": [
+    "Retrieval metrics such as recall at k",
+    "Answer metrics such as faithfulness",
+    "Who reviews failures and how often"
+   ],
+   "fails": "Without separate retrieval metrics, a bad answer cannot be traced to its cause."
+  }
+ ],
+ "failurePoints": {
+  "title": "Where RAG systems fail",
+  "source": {
+   "title": "Seven Failure Points When Engineering a Retrieval Augmented Generation System",
+   "url": "https://arxiv.org/abs/2401.05856"
+  },
+  "items": [
+   {
+    "name": "Missing content",
+    "stage": "ingest",
+    "text": "The answer is not in the indexed documents."
+   },
+   {
+    "name": "Missed the top-ranked documents",
+    "stage": "retrieve",
+    "text": "The answer exists but did not rank high enough to be returned."
+   },
+   {
+    "name": "Not in context",
+    "stage": "assemble",
+    "text": "The passage was retrieved but dropped when the prompt was assembled."
+   },
+   {
+    "name": "Not extracted",
+    "stage": "generate",
+    "text": "The answer was in the prompt but the model did not use it."
+   },
+   {
+    "name": "Wrong format",
+    "stage": "generate",
+    "text": "The model ignored the requested format, such as a table or list."
+   },
+   {
+    "name": "Incorrect specificity",
+    "stage": "generate",
+    "text": "The answer is too general or too specific for the question."
+   },
+   {
+    "name": "Incomplete",
+    "stage": "generate",
+    "text": "The answer is correct but leaves out information that was available."
+   }
+  ]
+ },
+ "categories": {
+  "basic": "Search methods",
+  "index": "Indexing",
+  "query": "Query handling",
+  "rank": "Ranking",
+  "graph": "Graph and structure",
+  "adaptive": "Adaptive and agentic",
+  "visual": "Visual documents",
+  "trained": "Trained into the model",
+  "alternative": "Alternative",
+  "structured": "Structured data",
+  "context": "Context building",
+  "memory": "Memory",
+  "multimodal": "Multimodal"
+ },
+ "approaches": [
+  {
+   "id": "naive",
+   "name": "Basic RAG",
+   "category": "basic",
+   "what": "Embed the question, fetch the top passages and put them in the prompt.",
+   "how": [
+    "Embed the question",
+    "Find the nearest chunks",
+    "Answer from those chunks"
+   ],
+   "bestFor": "A first working system and a baseline to beat",
+   "strength": "Simple, fast and cheap to run",
+   "limit": "Fails on exact codes, multi-step questions and questions about the whole collection",
+   "indexCost": 1,
+   "queryCost": 1,
+   "multiHop": 1,
+   "global": 1,
+   "exact": 2,
+   "source": {
+    "title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+    "url": "https://arxiv.org/abs/2005.11401"
+   }
+  },
+  {
+   "id": "bm25",
+   "name": "Keyword search (BM25)",
+   "category": "basic",
+   "what": "Ranks passages by matching words, weighting rare words more and long passages less.",
+   "how": [
+    "Build an inverted index of words",
+    "Score each passage for the query words",
+    "Return the highest scores"
+   ],
+   "bestFor": "Product codes, names, error messages and legal references",
+   "strength": "Exact-term precision, transparent scores and no model needed",
+   "limit": "Misses paraphrases and synonyms",
+   "indexCost": 1,
+   "queryCost": 1,
+   "multiHop": 1,
+   "global": 1,
+   "exact": 3,
+   "source": {
+    "title": "The Probabilistic Relevance Framework: BM25 and Beyond",
+    "url": "https://doi.org/10.1561/1500000019"
+   }
+  },
+  {
+   "id": "dense",
+   "name": "Dense vector search",
+   "category": "basic",
+   "what": "A neural model turns questions and passages into vectors, and search returns the passages whose vectors are closest.",
+   "how": [
+    "Embed every chunk once",
+    "Embed the question",
+    "Return nearest neighbours"
+   ],
+   "bestFor": "Questions worded differently from the documents",
+   "strength": "Finds meaning, not just matching words",
+   "limit": "Weak on rare exact terms, and quality depends on the embedding model's training domain",
+   "indexCost": 2,
+   "queryCost": 1,
+   "multiHop": 1,
+   "global": 1,
+   "exact": 1,
+   "source": {
+    "title": "Dense Passage Retrieval for Open-Domain Question Answering",
+    "url": "https://arxiv.org/abs/2004.04906"
+   }
+  },
+  {
+   "id": "hybrid",
+   "name": "Hybrid search with rank fusion",
+   "category": "basic",
+   "what": "Runs keyword and vector search together and merges the two ranked lists.",
+   "how": [
+    "Run BM25 and vector search",
+    "Merge with reciprocal rank fusion: each passage scores 1 / (k + rank) in each list",
+    "Keep the top merged results"
+   ],
+   "bestFor": "The default starting point for enterprise documents",
+   "strength": "Catches both exact terms and paraphrases; fusion needs no score calibration",
+   "limit": "Two indexes to build and keep in sync",
+   "indexCost": 2,
+   "queryCost": 1,
+   "multiHop": 1,
+   "global": 1,
+   "exact": 3,
+   "source": {
+    "title": "Reciprocal rank fusion outperforms Condorcet and individual rank learning methods",
+    "url": "https://doi.org/10.1145/1571941.1572114"
+   }
+  },
+  {
+   "id": "splade",
+   "name": "Learned sparse retrieval (SPLADE)",
+   "category": "basic",
+   "what": "A model expands each passage into weighted keywords, including related words it does not contain, then searches like a keyword index.",
+   "how": [
+    "Expand passages into weighted terms",
+    "Store in an inverted index",
+    "Match expanded query terms"
+   ],
+   "bestFor": "Keyword-style infrastructure with some semantic matching",
+   "strength": "Interpretable terms and efficient inverted-index search",
+   "limit": "Needs a trained expansion model; less common in managed products",
+   "indexCost": 2,
+   "queryCost": 1,
+   "multiHop": 1,
+   "global": 1,
+   "exact": 3,
+   "source": {
+    "title": "SPLADE: Sparse Lexical and Expansion Model for First Stage Ranking",
+    "url": "https://arxiv.org/abs/2107.05720"
+   }
+  },
+  {
+   "id": "chunking",
+   "name": "Retrieval granularity",
+   "category": "index",
+   "what": "Chooses the unit that is indexed: fixed token windows, sentences, sections or self-contained propositions.",
+   "how": [
+    "Pick a unit",
+    "Index that unit",
+    "Optionally return the surrounding section to the model"
+   ],
+   "bestFor": "Any system; it is one of the largest quality levers",
+   "strength": "Smaller units retrieve more precisely; larger units carry more context",
+   "limit": "No single size suits every question; must be tested on your data",
+   "indexCost": 1,
+   "queryCost": 1,
+   "multiHop": 1,
+   "global": 1,
+   "exact": 2,
+   "source": {
+    "title": "Dense X Retrieval: What Retrieval Granularity Should We Use?",
+    "url": "https://arxiv.org/abs/2312.06648"
+   }
+  },
+  {
+   "id": "late-chunking",
+   "name": "Late chunking",
+   "category": "index",
+   "what": "Embeds the whole document first with a long-context embedding model, then splits the token vectors into chunks, so each chunk's vector reflects its surrounding text.",
+   "how": [
+    "Run the full document through the embedding model",
+    "Pool token vectors per chunk",
+    "Index the chunk vectors"
+   ],
+   "bestFor": "Documents where pronouns and references cross chunk boundaries",
+   "strength": "Chunks keep context without extra model calls",
+   "limit": "Requires a long-context embedding model",
+   "indexCost": 2,
+   "queryCost": 1,
+   "multiHop": 1,
+   "global": 1,
+   "exact": 1,
+   "source": {
+    "title": "Late Chunking: Contextual Chunk Embeddings Using Long-Context Embedding Models",
+    "url": "https://arxiv.org/abs/2409.04701"
+   }
+  },
+  {
+   "id": "contextual",
+   "name": "Contextual retrieval",
+   "category": "index",
+   "what": "Before indexing, a model writes a short note placing each chunk in its document, and that note is indexed with the chunk for both keyword and vector search.",
+   "how": [
+    "Generate a one or two sentence context per chunk",
+    "Prepend it to the chunk",
+    "Index for BM25 and embeddings"
+   ],
+   "bestFor": "Chunks that are ambiguous on their own, such as a figure without its company name",
+   "strength": "Anthropic reported 49% fewer top-20 retrieval failures, and 67% with reranking, on their tests",
+   "limit": "One model call per chunk at index time",
+   "indexCost": 3,
+   "queryCost": 1,
+   "multiHop": 1,
+   "global": 1,
+   "exact": 3,
+   "source": {
+    "title": "Anthropic: Introducing Contextual Retrieval",
+    "url": "https://www.anthropic.com/news/contextual-retrieval"
+   }
+  },
+  {
+   "id": "hyde",
+   "name": "Hypothetical document embeddings (HyDE)",
+   "category": "query",
+   "what": "A model first writes a plausible answer, and that answer, not the question, is used for vector search.",
+   "how": [
+    "Generate a hypothetical answer",
+    "Embed it",
+    "Retrieve real passages near it"
+   ],
+   "bestFor": "Short questions that look very different from the documents",
+   "strength": "Needs no labelled data",
+   "limit": "Adds a model call; a wrong guess can steer retrieval the wrong way",
+   "indexCost": 1,
+   "queryCost": 2,
+   "multiHop": 1,
+   "global": 1,
+   "exact": 1,
+   "source": {
+    "title": "Precise Zero-Shot Dense Retrieval without Relevance Labels",
+    "url": "https://arxiv.org/abs/2212.10496"
+   }
+  },
+  {
+   "id": "rewrite",
+   "name": "Query rewriting",
+   "category": "query",
+   "what": "Rewrites the user's question into a clearer search query, for example resolving 'it' from earlier conversation.",
+   "how": [
+    "Rewrite with a model",
+    "Search with the rewrite",
+    "Answer the original question"
+   ],
+   "bestFor": "Conversational assistants with follow-up questions",
+   "strength": "Fixes under-specified questions",
+   "limit": "Adds latency, and the rewrite can change meaning",
+   "indexCost": 1,
+   "queryCost": 2,
+   "multiHop": 1,
+   "global": 1,
+   "exact": 2,
+   "source": {
+    "title": "Query Rewriting for Retrieval-Augmented Large Language Models",
+    "url": "https://arxiv.org/abs/2305.14283"
+   }
+  },
+  {
+   "id": "multiquery",
+   "name": "Multi-query with fusion (RAG-Fusion)",
+   "category": "query",
+   "what": "Generates several versions of the question, searches with each, and fuses the results.",
+   "how": [
+    "Generate several queries",
+    "Retrieve for each",
+    "Merge with reciprocal rank fusion"
+   ],
+   "bestFor": "Broad or ambiguous questions",
+   "strength": "Higher recall from different phrasings",
+   "limit": "Several searches per question, and more off-topic passages",
+   "indexCost": 1,
+   "queryCost": 2,
+   "multiHop": 2,
+   "global": 1,
+   "exact": 2,
+   "source": {
+    "title": "RAG-Fusion: a New Take on Retrieval-Augmented Generation",
+    "url": "https://arxiv.org/abs/2402.03367"
+   }
+  },
+  {
+   "id": "rerank",
+   "name": "Cross-encoder reranking",
+   "category": "rank",
+   "what": "A second model reads the question and each candidate passage together and scores how well the passage answers it.",
+   "how": [
+    "Retrieve many candidates cheaply",
+    "Score each pair with the reranker",
+    "Keep the best few"
+   ],
+   "bestFor": "Almost every production system",
+   "strength": "Much more accurate ordering than first-stage search",
+   "limit": "Cost grows with the number of candidates",
+   "indexCost": 1,
+   "queryCost": 2,
+   "multiHop": 1,
+   "global": 1,
+   "exact": 2,
+   "source": {
+    "title": "Passage Re-ranking with BERT",
+    "url": "https://arxiv.org/abs/1901.04085"
+   }
+  },
+  {
+   "id": "colbert",
+   "name": "Late interaction (ColBERT)",
+   "category": "rank",
+   "what": "Keeps one vector per token rather than per passage and matches each query token to its best passage token.",
+   "how": [
+    "Store token-level vectors",
+    "For each query token find the best match",
+    "Sum the matches"
+   ],
+   "bestFor": "High-accuracy search when storage is available",
+   "strength": "Accuracy close to a reranker at search speed",
+   "limit": "Much larger index",
+   "indexCost": 2,
+   "queryCost": 1,
+   "multiHop": 1,
+   "global": 1,
+   "exact": 2,
+   "source": {
+    "title": "ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT",
+    "url": "https://arxiv.org/abs/2004.12832"
+   },
+   "more": [
+    {
+     "title": "ColBERTv2: Effective and Efficient Retrieval via Lightweight Late Interaction",
+     "url": "https://arxiv.org/abs/2112.01488"
+    }
+   ]
+  },
+  {
+   "id": "raptor",
+   "name": "RAPTOR (tree of summaries)",
+   "category": "graph",
+   "what": "Clusters chunks, summarizes each cluster, then clusters and summarizes the summaries, building a tree that can be searched at any level of detail.",
+   "how": [
+    "Cluster chunk embeddings",
+    "Summarize each cluster",
+    "Repeat upwards and index all levels"
+   ],
+   "bestFor": "Long documents and questions about overall themes",
+   "strength": "Answers both detailed and high-level questions",
+   "limit": "Many model calls at index time; summaries must be rebuilt when content changes",
+   "indexCost": 3,
+   "queryCost": 1,
+   "multiHop": 2,
+   "global": 3,
+   "exact": 1,
+   "source": {
+    "title": "RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval",
+    "url": "https://arxiv.org/abs/2401.18059"
+   }
+  },
+  {
+   "id": "graphrag",
+   "name": "GraphRAG",
+   "category": "graph",
+   "what": "A model extracts entities and relationships from every chunk into a knowledge graph, groups the graph into communities, and writes a summary of each community.",
+   "how": [
+    "Extract entities and relations with a model",
+    "Detect communities (Leiden algorithm)",
+    "Summarize each community",
+    "Local search: start from entities in the question",
+    "Global search: map the question over community summaries and combine"
+   ],
+   "bestFor": "Questions about the whole collection, such as 'what are the main themes?'",
+   "strength": "Answers global questions that chunk retrieval cannot",
+   "limit": "Very high index-time cost, extraction errors become graph errors, and re-indexing is expensive",
+   "indexCost": 3,
+   "queryCost": 3,
+   "multiHop": 3,
+   "global": 3,
+   "exact": 1,
+   "source": {
+    "title": "From Local to Global: A Graph RAG Approach to Query-Focused Summarization",
+    "url": "https://arxiv.org/abs/2404.16130"
+   },
+   "docs": {
+    "title": "Microsoft GraphRAG documentation",
+    "url": "https://microsoft.github.io/graphrag/"
+   }
+  },
+  {
+   "id": "lightrag",
+   "name": "LightRAG",
+   "category": "graph",
+   "what": "Builds an entity graph like GraphRAG but retrieves through entity and relation keywords at two levels, and supports adding documents without rebuilding.",
+   "how": [
+    "Extract entities and relations",
+    "Index them as keys",
+    "Retrieve low-level (specific) and high-level (thematic) keys"
+   ],
+   "bestFor": "Graph-style retrieval on collections that change",
+   "strength": "Cheaper queries and incremental updates",
+   "limit": "Still depends on model-based extraction at index time",
+   "indexCost": 3,
+   "queryCost": 2,
+   "multiHop": 2,
+   "global": 2,
+   "exact": 1,
+   "source": {
+    "title": "LightRAG: Simple and Fast Retrieval-Augmented Generation",
+    "url": "https://arxiv.org/abs/2410.05779"
+   }
+  },
+  {
+   "id": "hipporag",
+   "name": "HippoRAG",
+   "category": "graph",
+   "what": "Builds a knowledge graph from passages and, for each question, spreads relevance from the question's entities across the graph with Personalized PageRank.",
+   "how": [
+    "Extract a schema-free knowledge graph",
+    "Find question entities",
+    "Run Personalized PageRank",
+    "Rank passages by their entities' scores"
+   ],
+   "bestFor": "Multi-hop questions that link facts from different documents",
+   "strength": "Multi-hop retrieval in a single step",
+   "limit": "Graph quality limits results",
+   "indexCost": 3,
+   "queryCost": 2,
+   "multiHop": 3,
+   "global": 2,
+   "exact": 1,
+   "source": {
+    "title": "HippoRAG: Neurobiologically Inspired Long-Term Memory for Large Language Models",
+    "url": "https://arxiv.org/abs/2405.14831"
+   }
+  },
+  {
+   "id": "kg",
+   "name": "Knowledge-graph reasoning (Think-on-Graph)",
+   "category": "graph",
+   "what": "The model explores an existing knowledge graph step by step, choosing which relations to follow until it can answer.",
+   "how": [
+    "Start at question entities",
+    "Let the model choose relations to expand",
+    "Stop when the path answers the question"
+   ],
+   "bestFor": "Organizations that already maintain a curated knowledge graph",
+   "strength": "Traceable reasoning paths over trusted data",
+   "limit": "Needs a good existing graph and several model calls",
+   "indexCost": 1,
+   "queryCost": 3,
+   "multiHop": 3,
+   "global": 1,
+   "exact": 3,
+   "source": {
+    "title": "Think-on-Graph: Deep and Responsible Reasoning of Large Language Model on Knowledge Graph",
+    "url": "https://arxiv.org/abs/2307.07697"
+   }
+  },
+  {
+   "id": "selfrag",
+   "name": "Self-RAG",
+   "category": "adaptive",
+   "what": "A model trained to decide when to retrieve and to grade its own passages and answers with special reflection tokens.",
+   "how": [
+    "Decide whether to retrieve",
+    "Grade relevance of each passage",
+    "Grade whether the answer is supported"
+   ],
+   "bestFor": "Mixed traffic where many questions need no retrieval",
+   "strength": "Retrieves only when useful and self-checks support",
+   "limit": "Requires a specially trained model",
+   "indexCost": 1,
+   "queryCost": 2,
+   "multiHop": 2,
+   "global": 1,
+   "exact": 2,
+   "source": {
+    "title": "Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection",
+    "url": "https://arxiv.org/abs/2310.11511"
+   }
+  },
+  {
+   "id": "crag",
+   "name": "Corrective RAG (CRAG)",
+   "category": "adaptive",
+   "what": "A lightweight evaluator grades the retrieved passages; if they look wrong it triggers a fallback such as another search, and it strips irrelevant parts.",
+   "how": [
+    "Grade retrieval quality",
+    "Correct, ambiguous or incorrect",
+    "Refine or search again accordingly"
+   ],
+   "bestFor": "Collections where retrieval is often wrong",
+   "strength": "Fewer answers built on bad passages",
+   "limit": "Extra component to train or tune; web fallback may be inappropriate for private data",
+   "indexCost": 1,
+   "queryCost": 2,
+   "multiHop": 1,
+   "global": 1,
+   "exact": 2,
+   "source": {
+    "title": "Corrective Retrieval Augmented Generation",
+    "url": "https://arxiv.org/abs/2401.15884"
+   }
+  },
+  {
+   "id": "adaptive",
+   "name": "Adaptive-RAG",
+   "category": "adaptive",
+   "what": "A classifier judges how complex each question is and routes it to no retrieval, single-step retrieval or multi-step retrieval.",
+   "how": [
+    "Classify question complexity",
+    "Route to the matching strategy"
+   ],
+   "bestFor": "Controlling cost on mixed workloads",
+   "strength": "Spends effort only where needed",
+   "limit": "Misrouted questions get the wrong treatment",
+   "indexCost": 1,
+   "queryCost": 2,
+   "multiHop": 3,
+   "global": 1,
+   "exact": 2,
+   "source": {
+    "title": "Adaptive-RAG: Learning to Adapt Retrieval-Augmented Large Language Models through Question Complexity",
+    "url": "https://arxiv.org/abs/2403.14403"
+   }
+  },
+  {
+   "id": "flare",
+   "name": "Active retrieval (FLARE)",
+   "category": "adaptive",
+   "what": "Retrieves again during generation whenever the model is about to write something it is unsure of.",
+   "how": [
+    "Draft the next sentence",
+    "If confidence is low, search with it",
+    "Rewrite the sentence with new evidence"
+   ],
+   "bestFor": "Long answers that need different facts in different parts",
+   "strength": "Evidence follows the answer as it develops",
+   "limit": "Needs token probabilities and repeated searches",
+   "indexCost": 1,
+   "queryCost": 3,
+   "multiHop": 2,
+   "global": 1,
+   "exact": 2,
+   "source": {
+    "title": "Active Retrieval Augmented Generation",
+    "url": "https://arxiv.org/abs/2305.06983"
+   }
+  },
+  {
+   "id": "ircot",
+   "name": "Interleaved retrieval and reasoning (IRCoT)",
+   "category": "adaptive",
+   "what": "Alternates between a reasoning step and a retrieval step, using each new reasoning sentence as the next search query.",
+   "how": [
+    "Retrieve for the question",
+    "Write one reasoning step",
+    "Retrieve with that step",
+    "Repeat until answered"
+   ],
+   "bestFor": "Multi-hop questions",
+   "strength": "Finds the second fact once the first is known",
+   "limit": "Several sequential model calls and searches",
+   "indexCost": 1,
+   "queryCost": 3,
+   "multiHop": 3,
+   "global": 1,
+   "exact": 2,
+   "source": {
+    "title": "Interleaving Retrieval with Chain-of-Thought Reasoning for Knowledge-Intensive Multi-Step Questions",
+    "url": "https://arxiv.org/abs/2212.10509"
+   }
+  },
+  {
+   "id": "agentic",
+   "name": "Agentic RAG",
+   "category": "adaptive",
+   "what": "An agent plans, chooses among several search tools and data sources, inspects results and decides when it has enough to answer.",
+   "how": [
+    "Plan the information needed",
+    "Call search tools",
+    "Reflect on results",
+    "Answer or search again"
+   ],
+   "bestFor": "Complex research tasks across several systems",
+   "strength": "Most flexible; can use databases, APIs and documents together",
+   "limit": "Least predictable cost and latency, and the hardest to test",
+   "indexCost": 1,
+   "queryCost": 3,
+   "multiHop": 3,
+   "global": 2,
+   "exact": 3,
+   "source": {
+    "title": "Agentic Retrieval-Augmented Generation: A Survey on Agentic RAG",
+    "url": "https://arxiv.org/abs/2501.09136"
+   }
+  },
+  {
+   "id": "colpali",
+   "name": "Visual document retrieval (ColPali)",
+   "category": "visual",
+   "what": "Embeds page images directly with a vision-language model, so tables, charts and layout are searchable without text extraction.",
+   "how": [
+    "Render pages as images",
+    "Embed image patches",
+    "Match query tokens to patches (late interaction)"
+   ],
+   "bestFor": "Scanned documents, slides, forms and reports full of tables",
+   "strength": "Skips fragile parsing steps",
+   "limit": "Large index; the answering model must read images",
+   "indexCost": 2,
+   "queryCost": 1,
+   "multiHop": 1,
+   "global": 1,
+   "exact": 1,
+   "source": {
+    "title": "ColPali: Efficient Document Retrieval with Vision Language Models",
+    "url": "https://arxiv.org/abs/2407.01449"
+   }
+  },
+  {
+   "id": "replug",
+   "name": "REPLUG",
+   "category": "trained",
+   "what": "Treats the language model as a fixed black box and trains only the retriever, using the model's feedback on which passages helped.",
+   "how": [
+    "Retrieve passages",
+    "Score each by how much it helps the model",
+    "Train the retriever on that signal"
+   ],
+   "bestFor": "Improving retrieval for a model you cannot change, such as an API model",
+   "strength": "No access to model weights needed",
+   "limit": "Needs training data and a training loop for the retriever",
+   "indexCost": 2,
+   "queryCost": 2,
+   "multiHop": 1,
+   "global": 1,
+   "exact": 2,
+   "source": {
+    "title": "REPLUG: Retrieval-Augmented Black-Box Language Models",
+    "url": "https://arxiv.org/abs/2301.12652"
+   }
+  },
+  {
+   "id": "fid",
+   "name": "Fusion-in-Decoder",
+   "category": "trained",
+   "what": "Encodes each retrieved passage separately and lets the decoder attend to all of them together; the model is trained for this.",
+   "how": [
+    "Encode each passage with the question",
+    "Concatenate encodings",
+    "Decode the answer"
+   ],
+   "bestFor": "Research and custom question-answering models",
+   "strength": "Uses many passages efficiently",
+   "limit": "Requires training an encoder-decoder model",
+   "indexCost": 2,
+   "queryCost": 2,
+   "multiHop": 2,
+   "global": 1,
+   "exact": 2,
+   "source": {
+    "title": "Leveraging Passage Retrieval with Generative Models for Open Domain Question Answering",
+    "url": "https://arxiv.org/abs/2007.01282"
+   }
+  },
+  {
+   "id": "retro",
+   "name": "RETRO",
+   "category": "trained",
+   "what": "Builds retrieval into the model itself: during pre-training and use, each chunk of text attends to similar chunks fetched from a very large database.",
+   "how": [
+    "Split input into chunks",
+    "Retrieve neighbours per chunk",
+    "Attend to them through cross-attention layers"
+   ],
+   "bestFor": "Research on retrieval-native models",
+   "strength": "Smaller models can match larger ones on some tasks",
+   "limit": "The model must be trained this way from the start",
+   "indexCost": 3,
+   "queryCost": 2,
+   "multiHop": 1,
+   "global": 1,
+   "exact": 2,
+   "source": {
+    "title": "Improving language models by retrieving from trillions of tokens",
+    "url": "https://arxiv.org/abs/2112.04426"
+   }
+  },
+  {
+   "id": "longcontext",
+   "name": "Long context instead of retrieval",
+   "category": "alternative",
+   "what": "Puts the whole document set in the prompt and lets the model find the answer.",
+   "how": [
+    "Check that the documents fit the context window",
+    "Send them all with the question"
+   ],
+   "bestFor": "Small, stable collections and one-off analysis",
+   "strength": "No index to build or maintain",
+   "limit": "Cost per question grows with the whole collection, and accuracy depends on where the answer sits; research found retrieval and long context work best combined",
+   "indexCost": 1,
+   "queryCost": 3,
+   "multiHop": 2,
+   "global": 2,
+   "exact": 2,
+   "source": {
+    "title": "Retrieval meets Long Context Large Language Models",
+    "url": "https://arxiv.org/abs/2310.03025"
+   }
+  },
+  {
+   "id": "semantic-chunking",
+   "name": "Semantic chunking",
+   "category": "index",
+   "what": "Splits a document where the topic changes instead of every fixed number of words: consecutive sentences are embedded and a cut is made where their similarity drops sharply.",
+   "how": [
+    "Embed each sentence, usually together with its neighbours",
+    "Measure the distance between consecutive sentences",
+    "Cut where the distance is above a percentile, commonly the 95th"
+   ],
+   "bestFor": "Long documents whose sections vary a lot in length",
+   "strength": "Chunks follow the topic instead of cutting it in half",
+   "limit": "An embedding call per sentence at indexing time; a 2024 study found the gains over fixed-size chunks were not consistent enough to justify the cost",
+   "indexCost": 2,
+   "queryCost": 1,
+   "exact": 2,
+   "multiHop": 1,
+   "global": 1,
+   "source": {
+    "title": "Is Semantic Chunking Worth the Computational Cost?",
+    "url": "https://arxiv.org/abs/2410.13070"
+   },
+   "docs": {
+    "title": "Greg Kamradt: 5 Levels of Text Splitting (semantic splitting tutorial)",
+    "url": "https://github.com/FullStackRetrieval-com/RetrievalTutorials/blob/main/tutorials/LevelsOfTextSplitting/5_Levels_Of_Text_Splitting.ipynb"
+   }
+  },
+  {
+   "id": "hierarchical-chunking",
+   "name": "Hierarchical (parent and child) chunking",
+   "category": "index",
+   "what": "Indexes small child chunks for precise matching but returns the larger parent chunk they belong to, so the model sees enough surrounding text.",
+   "how": [
+    "Split each document into large parent chunks",
+    "Split each parent into small child chunks",
+    "Search the children, then return their parents"
+   ],
+   "bestFor": "Questions answered by one sentence that only makes sense with its paragraph",
+   "strength": "Precise matching without losing context",
+   "limit": "Parents enlarge the prompt; several children of one parent need merging to avoid duplicates",
+   "indexCost": 1,
+   "queryCost": 1,
+   "exact": 2,
+   "multiHop": 1,
+   "global": 1,
+   "source": {
+    "title": "LlamaIndex: Auto Merging Retriever (HierarchicalNodeParser)",
+    "url": "https://developers.llamaindex.ai/python/framework/integrations/retrievers/auto_merging_retriever/"
+   }
+  },
+  {
+   "id": "stepback",
+   "name": "Step-back prompting",
+   "category": "query",
+   "what": "Before answering, the model asks a more general question about the concept or principle behind the original one, and retrieval runs for both questions.",
+   "how": [
+    "Generate a higher-level step-back question",
+    "Retrieve for the step-back and the original question",
+    "Answer using both sets of passages"
+   ],
+   "bestFor": "Specific questions whose answer depends on a general principle",
+   "strength": "Finds background that the literal wording does not match",
+   "limit": "One extra model call; the general question can drift from what was asked",
+   "indexCost": 1,
+   "queryCost": 2,
+   "exact": 1,
+   "multiHop": 2,
+   "global": 2,
+   "source": {
+    "title": "Take a Step Back: Evoking Reasoning via Abstraction in Large Language Models",
+    "url": "https://arxiv.org/abs/2310.06117"
+   }
+  },
+  {
+   "id": "multihop",
+   "name": "Multi-hop retrieval with sub-questions (Self-Ask)",
+   "category": "query",
+   "what": "The model breaks the question into follow-up questions, answers each with a search, and uses each answer to form the next search.",
+   "how": [
+    "Ask the first follow-up question",
+    "Search and read the answer",
+    "Use what was found to ask the next question",
+    "Compose the final answer"
+   ],
+   "bestFor": "Questions that chain two or more facts, such as \"which models from the lab that built X use Y\"",
+   "strength": "Finds the second fact even when it shares no words with the original question",
+   "limit": "An error in an early hop carries into every later hop; several model calls per question",
+   "indexCost": 1,
+   "queryCost": 3,
+   "exact": 2,
+   "multiHop": 3,
+   "global": 1,
+   "source": {
+    "title": "Measuring and Narrowing the Compositionality Gap in Language Models",
+    "url": "https://arxiv.org/abs/2210.03350"
+   },
+   "more": [
+    {
+     "title": "MultiHop-RAG: Benchmarking Retrieval-Augmented Generation for Multi-Hop Queries",
+     "url": "https://arxiv.org/abs/2401.15391"
+    }
+   ]
+  },
+  {
+   "id": "sql-rag",
+   "name": "Structured retrieval (text-to-SQL and table-augmented generation)",
+   "category": "structured",
+   "what": "The model turns the question into a database query, the database runs it, and the result rows are given to the model to write the answer.",
+   "how": [
+    "Translate the question into SQL",
+    "Run the query against the database",
+    "Give the rows to the model",
+    "Write the answer from the rows"
+   ],
+   "bestFor": "Counting, filtering, ranking and aggregating over records",
+   "strength": "Exact arithmetic and complete results that passage search cannot give",
+   "limit": "Wrong SQL returns confident wrong answers; needs a schema the model can read and read-only access",
+   "indexCost": 1,
+   "queryCost": 2,
+   "exact": 3,
+   "multiHop": 2,
+   "global": 3,
+   "source": {
+    "title": "Text2SQL is Not Enough: Unifying AI and Databases with TAG",
+    "url": "https://arxiv.org/abs/2408.14717"
+   },
+   "more": [
+    {
+     "title": "DIN-SQL: Decomposed In-Context Learning of Text-to-SQL with Self-Correction",
+     "url": "https://arxiv.org/abs/2304.11015"
+    }
+   ]
+  },
+  {
+   "id": "compression",
+   "name": "Contextual compression",
+   "category": "context",
+   "what": "After retrieval, only the sentences or tokens that bear on the question are kept, and nothing is passed on if nothing is relevant.",
+   "how": [
+    "Retrieve passages as usual",
+    "Score each sentence or token against the question",
+    "Keep the useful ones and drop the rest",
+    "Optionally reorder so the most relevant text is not in the middle"
+   ],
+   "bestFor": "Long passages, many retrieved results, or tight token budgets",
+   "strength": "Smaller, cheaper prompts that are easier for the model to use",
+   "limit": "A sentence that looks irrelevant on its own may be needed to understand another",
+   "indexCost": 1,
+   "queryCost": 2,
+   "exact": 2,
+   "multiHop": 1,
+   "global": 1,
+   "source": {
+    "title": "RECOMP: Improving Retrieval-Augmented LMs with Compression and Selective Augmentation",
+    "url": "https://arxiv.org/abs/2310.04408"
+   },
+   "more": [
+    {
+     "title": "LongLLMLingua: Accelerating and Enhancing LLMs in Long Context Scenarios via Prompt Compression",
+     "url": "https://arxiv.org/abs/2310.06839"
+    },
+    {
+     "title": "Lost in the Middle: How Language Models Use Long Contexts",
+     "url": "https://arxiv.org/abs/2307.03172"
+    }
+   ]
+  },
+  {
+   "id": "multimodal",
+   "name": "Multimodal RAG",
+   "category": "multimodal",
+   "what": "Retrieves images, tables, audio or video as well as text, using encoders that place different media in one shared vector space, and gives them to a model that can read them.",
+   "how": [
+    "Encode text and images into a shared space",
+    "Retrieve across media for the question",
+    "Give the retrieved items to a model that accepts those inputs"
+   ],
+   "bestFor": "Manuals with diagrams, scanned forms, slides, product photos",
+   "strength": "Answers from content that has no text equivalent",
+   "limit": "Needs multimodal encoders and a generator that accepts the same inputs; harder to evaluate",
+   "indexCost": 3,
+   "queryCost": 2,
+   "exact": 1,
+   "multiHop": 1,
+   "global": 1,
+   "source": {
+    "title": "MuRAG: Multimodal Retrieval-Augmented Generator for Open Question Answering over Images and Text",
+    "url": "https://arxiv.org/abs/2210.02928"
+   },
+   "more": [
+    {
+     "title": "Ask in Any Modality: A Comprehensive Survey on Multimodal Retrieval-Augmented Generation",
+     "url": "https://arxiv.org/abs/2502.08826"
+    }
+   ]
+  },
+  {
+   "id": "memory",
+   "name": "Memory-augmented RAG",
+   "category": "memory",
+   "what": "Keeps a memory beyond the document index, such as a compressed global view of a long collection, earlier turns of a conversation, or an associative graph, and uses it to guide what is retrieved.",
+   "how": [
+    "Build or update the memory",
+    "Use it to produce clues or to resolve the question",
+    "Retrieve with those clues",
+    "Answer, then write back to memory if appropriate"
+   ],
+   "bestFor": "Long conversations, follow-up questions, and questions about a whole collection",
+   "strength": "Retrieves for questions that are vague or depend on earlier context",
+   "limit": "Memory can go stale or hold content that should be forgotten; harder to audit",
+   "indexCost": 2,
+   "queryCost": 2,
+   "exact": 1,
+   "multiHop": 2,
+   "global": 3,
+   "source": {
+    "title": "MemoRAG: Boosting Long Context Processing with Global Memory-Enhanced Retrieval Augmentation",
+    "url": "https://arxiv.org/abs/2409.05591"
+   },
+   "more": [
+    {
+     "title": "From RAG to Memory: Non-Parametric Continual Learning for Large Language Models",
+     "url": "https://arxiv.org/abs/2502.14802"
+    },
+    {
+     "title": "MemGPT: Towards LLMs as Operating Systems",
+     "url": "https://arxiv.org/abs/2310.08560"
+    }
+   ]
+  },
+  {
+   "id": "rl-rag",
+   "name": "Reinforcement-learning RAG",
+   "category": "trained",
+   "what": "The model is trained with reinforcement learning to decide when and what to search while it reasons, rewarded only on whether the final answer or retrieval is correct.",
+   "how": [
+    "Let the model interleave reasoning with search calls",
+    "Score only the outcome, such as an exact-match answer or retrieval recall",
+    "Update the policy so successful search behaviour becomes more likely"
+   ],
+   "bestFor": "Teams that can train models and have questions with checkable answers",
+   "strength": "Learns search strategies that prompting does not produce",
+   "limit": "Training cost and reward design; the learned behaviour is specific to the search tool used in training",
+   "indexCost": 1,
+   "queryCost": 3,
+   "exact": 2,
+   "multiHop": 3,
+   "global": 1,
+   "source": {
+    "title": "Search-R1: Training LLMs to Reason and Leverage Search Engines with Reinforcement Learning",
+    "url": "https://arxiv.org/abs/2503.09516"
+   },
+   "more": [
+    {
+     "title": "R1-Searcher: Incentivizing the Search Capability in LLMs via Reinforcement Learning",
+     "url": "https://arxiv.org/abs/2503.05592"
+    },
+    {
+     "title": "DeepRetrieval: Hacking Real Search Engines and Retrievers with Large Language Models via Reinforcement Learning",
+     "url": "https://arxiv.org/abs/2503.00223"
+    }
+   ]
+  }
+ ],
+ "chooser": {
+  "intro": "Answer six questions about your use case. Each recommendation states the rule that produced it, so you can disagree with the rule rather than with a score.",
+  "questions": [
+   {
+    "id": "questionType",
+    "label": "What kind of questions will users ask?",
+    "options": [
+     {
+      "id": "lookup",
+      "label": "Look up a specific fact or passage"
+     },
+     {
+      "id": "multihop",
+      "label": "Combine facts from several documents"
+     },
+     {
+      "id": "global",
+      "label": "Summarize themes across the whole collection"
+     }
+    ]
+   },
+   {
+    "id": "exactTerms",
+    "label": "Do questions contain exact identifiers such as codes, names or clause numbers?",
+    "options": [
+     {
+      "id": "yes",
+      "label": "Often"
+     },
+     {
+      "id": "no",
+      "label": "Rarely"
+     }
+    ]
+   },
+   {
+    "id": "format",
+    "label": "What are the documents like?",
+    "options": [
+     {
+      "id": "text",
+      "label": "Mostly text"
+     },
+     {
+      "id": "visual",
+      "label": "Scans, slides or many tables and charts"
+     }
+    ]
+   },
+   {
+    "id": "size",
+    "label": "How large is the collection?",
+    "options": [
+     {
+      "id": "fits",
+      "label": "Fits in the model's context window"
+     },
+     {
+      "id": "large",
+      "label": "Far larger than any context window"
+     }
+    ]
+   },
+   {
+    "id": "change",
+    "label": "How often does content change?",
+    "options": [
+     {
+      "id": "static",
+      "label": "Rarely"
+     },
+     {
+      "id": "frequent",
+      "label": "Daily or continuously"
+     }
+    ]
+   },
+   {
+    "id": "latency",
+    "label": "How strict is the response-time budget?",
+    "options": [
+     {
+      "id": "strict",
+      "label": "Strict, a few seconds at most"
+     },
+     {
+      "id": "relaxed",
+      "label": "Relaxed, research-style answers are fine"
+     }
+    ]
+   }
+  ],
+  "rules": [
+   {
+    "when": {},
+    "add": [
+     "hybrid",
+     "rerank"
+    ],
+    "why": "Hybrid search with reranking is the strongest general default: keyword search catches exact terms, vector search catches paraphrase, and the reranker fixes ordering."
+   },
+   {
+    "when": {
+     "exactTerms": "yes"
+    },
+    "add": [
+     "bm25",
+     "contextual"
+    ],
+    "why": "Exact identifiers are matched reliably by keyword search; vector search alone often misses them."
+   },
+   {
+    "when": {
+     "questionType": "multihop",
+     "latency": "relaxed"
+    },
+    "add": [
+     "ircot",
+     "hipporag"
+    ],
+    "why": "Multi-hop questions need the second fact to be found after the first; iterative retrieval or graph propagation does this."
+   },
+   {
+    "when": {
+     "questionType": "multihop",
+     "latency": "strict"
+    },
+    "add": [
+     "hipporag",
+     "multiquery"
+    ],
+    "why": "Under a strict time budget, single-step graph propagation or parallel queries are preferred to sequential loops."
+   },
+   {
+    "when": {
+     "questionType": "global"
+    },
+    "add": [
+     "graphrag",
+     "raptor"
+    ],
+    "why": "Questions about the whole collection need pre-built summaries; chunk retrieval only sees a few passages."
+   },
+   {
+    "when": {
+     "questionType": "global",
+     "change": "frequent"
+    },
+    "add": [
+     "lightrag"
+    ],
+    "avoid": [
+     "graphrag"
+    ],
+    "why": "Community summaries are expensive to rebuild; an approach that supports incremental updates suits changing content."
+   },
+   {
+    "when": {
+     "format": "visual"
+    },
+    "add": [
+     "colpali"
+    ],
+    "why": "Retrieving page images avoids losing tables and charts during text extraction."
+   },
+   {
+    "when": {
+     "size": "fits"
+    },
+    "add": [
+     "longcontext"
+    ],
+    "why": "If everything fits, sending it all is a real option; measure it against retrieval, since answer position affects accuracy."
+   },
+   {
+    "when": {
+     "latency": "strict"
+    },
+    "avoid": [
+     "agentic",
+     "flare",
+     "ircot"
+    ],
+    "why": "Iterative and agentic approaches make several sequential model calls and are hard to bound in time."
+   },
+   {
+    "when": {
+     "latency": "relaxed",
+     "questionType": "multihop"
+    },
+    "add": [
+     "agentic"
+    ],
+    "why": "With time available, an agent can search several sources and check its own progress."
+   }
+  ]
+ },
+ "metrics": [
+  {
+   "label": "Recall at k",
+   "tex": "\\text{Recall@}k = \\frac{|\\text{relevant} \\cap \\text{top}_k|}{|\\text{relevant}|}",
+   "note": "Did the right passages make it into the top k at all? Measure this first; generation cannot recover a passage that was never retrieved."
+  },
+  {
+   "label": "Precision at k",
+   "tex": "\\text{Precision@}k = \\frac{|\\text{relevant} \\cap \\text{top}_k|}{k}",
+   "note": "How much of what was retrieved is useful. Low precision fills the prompt with distractions."
+  },
+  {
+   "label": "Mean reciprocal rank",
+   "tex": "\\text{MRR} = \\frac{1}{|Q|}\\sum_{q \\in Q} \\frac{1}{\\text{rank}_q}",
+   "note": "How high the first relevant passage ranks, averaged over questions."
+  },
+  {
+   "label": "Normalized discounted cumulative gain",
+   "tex": "\\text{nDCG@}k = \\frac{\\sum_{i=1}^{k} \\frac{rel_i}{\\log_2(i+1)}}{\\text{IDCG@}k}",
+   "note": "Rewards placing the most relevant passages first, and allows graded relevance. Järvelin and Kekäläinen, 2002, doi:10.1145/582415.582418."
+  },
+  {
+   "label": "Faithfulness",
+   "tex": "\\text{Faithfulness} = \\frac{\\text{claims supported by the retrieved context}}{\\text{claims in the answer}}",
+   "note": "Whether the answer says only what the passages support. As defined in the Ragas paper; scoring usually uses a model as judge, which must itself be checked."
+  },
+  {
+   "label": "Context recall",
+   "tex": "\\text{Context recall} = \\frac{\\text{reference-answer statements found in the context}}{\\text{reference-answer statements}}",
+   "note": "Whether the retrieved passages contain everything needed for a reference answer."
+  }
+ ],
+ "metricsSource": {
+  "title": "Ragas: Automated Evaluation of Retrieval Augmented Generation",
+  "url": "https://arxiv.org/abs/2309.15217"
+ },
+ "risks": [
+  {
+   "title": "Instructions hidden in documents",
+   "text": "Retrieved text enters the prompt, so a document can contain instructions that the model may follow. Treat retrieved content as untrusted data, and limit what actions a RAG system can take.",
+   "source": {
+    "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+    "url": "https://arxiv.org/abs/2302.12173"
+   }
+  },
+  {
+   "title": "Poisoned knowledge",
+   "text": "A few crafted passages added to a collection can steer answers to chosen questions. Control who can write to indexed sources and keep an audit trail.",
+   "source": {
+    "title": "PoisonedRAG: Knowledge Corruption Attacks to Retrieval-Augmented Generation of Large Language Models",
+    "url": "https://arxiv.org/abs/2402.07867"
+   }
+  },
+  {
+   "title": "Permission leaks",
+   "text": "If retrieval ignores document permissions, the model can quote content the user is not allowed to see. Filter by the user's access rights at retrieval time, not after generation."
+  },
+  {
+   "title": "Stale or conflicting sources",
+   "text": "Old and new versions of a policy can both be retrieved. Index version and effective dates, and prefer or exclude superseded documents."
+  },
+  {
+   "title": "Unsupported answers",
+   "text": "A cited answer can still contain claims no passage supports. Measure faithfulness and allow the system to say the answer was not found."
+  },
+  {
+   "title": "Position effects",
+   "text": "Models use evidence at the start and end of long contexts better than in the middle, so more passages is not always better.",
+   "source": {
+    "title": "Lost in the Middle: How Language Models Use Long Contexts",
+    "url": "https://arxiv.org/abs/2307.03172"
+   }
+  }
+ ],
+ "checklist": [
+  "Retrieval test set with known relevant passages",
+  "Recall at k measured before tuning generation",
+  "Faithfulness measured on answers",
+  "Permission filtering applied at retrieval time",
+  "Write access to indexed sources controlled and logged",
+  "Document versions and dates indexed",
+  "Defined behaviour when no evidence is found",
+  "Index refresh and deletion process tested"
+ ],
+ "compare": {
+  "title": "RAG, fine-tuning or long context?",
+  "rows": [
+   {
+    "need": "Up-to-date facts",
+    "rag": "Strong: update the index",
+    "ft": "Weak: requires retraining",
+    "long": "Strong, if it fits"
+   },
+   {
+    "need": "Cite sources",
+    "rag": "Strong",
+    "ft": "Weak: no record of where knowledge came from",
+    "long": "Possible"
+   },
+   {
+    "need": "Consistent format and tone",
+    "rag": "Weak",
+    "ft": "Strong",
+    "long": "Weak"
+   },
+   {
+    "need": "Per-user permissions",
+    "rag": "Strong, if filtered at retrieval",
+    "ft": "Weak: everything trained is available to everyone",
+    "long": "Possible, per request"
+   },
+   {
+    "need": "Cost per question",
+    "rag": "Low to medium",
+    "ft": "Low once trained",
+    "long": "High for large collections"
+   },
+   {
+    "need": "Up-front effort",
+    "rag": "Index and pipeline",
+    "ft": "Data, training and evaluation",
+    "long": "Minimal"
+   }
+  ]
+ },
+ "graphNote": "This graph is built from this app's own catalog: each model is linked to its publisher, architecture family, building blocks and licence. A production GraphRAG system extracts entities and relations from text with a language model, which introduces errors this demonstration does not have. Communities here are found with label propagation; Microsoft GraphRAG uses the Leiden algorithm, and writes community summaries with a model, where this page computes them from counts.",
+ "graphSources": [
+  {
+   "title": "Near linear time algorithm to detect community structures in large-scale networks (label propagation)",
+   "url": "https://arxiv.org/abs/0709.2938"
+  },
+  {
+   "title": "From Louvain to Leiden: guaranteeing well-connected communities",
+   "url": "https://arxiv.org/abs/1810.08473"
+  },
+  {
+   "title": "Graph Retrieval-Augmented Generation: A Survey",
+   "url": "https://arxiv.org/abs/2408.08921"
+  }
+ ],
+ "labNote": "The search runs in your browser over the text of this app's own explainers. BM25 is implemented as published. The second retriever compares character trigrams, which tolerates spelling and word-form differences; it stands in for vector search, which needs a neural embedding model that is not loaded here. Fusion uses reciprocal rank fusion with k = 60.",
+ "survey": {
+  "title": "Retrieval-Augmented Generation for Large Language Models: A Survey",
+  "url": "https://arxiv.org/abs/2312.10997"
+ },
+ "techniques": {
+  "intro": "Twenty retrieval-augmented generation techniques, each run live in your browser on the text of this app (its explainers, building blocks, fine-tuning and RAG pages) or on the model catalog. Every step shows its real intermediate output. No language model runs in this page, so where a technique needs one, the step it would perform is stated, and what this page uses instead is named.",
+  "corpusNote": "Dense vectors come from latent semantic analysis: a truncated singular value decomposition of the tf-idf matrix of this corpus, computed in your browser. They capture which words occur together here, not general language meaning as a neural embedding model does.",
+  "items": [
+   {
+    "id": "naive",
+    "name": "Naive or dense RAG",
+    "approaches": [
+     "naive",
+     "dense"
+    ],
+    "plain": "Turn the question into a vector, find the passages whose vectors point the same way, put them in the prompt.",
+    "paper": [
+     "A trained dual encoder (DPR) embeds every passage once",
+     "The question is embedded with the query encoder",
+     "The nearest passages by inner product are retrieved",
+     "A generator reads question and passages together"
+    ],
+    "here": "Passages and question are embedded with the latent semantic vectors and ranked by cosine similarity; the top passages are placed in the prompt shown below.",
+    "differs": "The vectors are latent semantic analysis, not a trained neural encoder. The answer is extracted from the retrieved sentences; nothing is generated."
+   },
+   {
+    "id": "hybrid",
+    "name": "Hybrid RAG",
+    "approaches": [
+     "hybrid",
+     "bm25",
+     "splade"
+    ],
+    "plain": "Run keyword search and vector search, then merge the two rankings so each covers the other's blind spots.",
+    "paper": [
+     "Rank with BM25",
+     "Rank with dense vectors",
+     "Fuse the ranks with reciprocal rank fusion, score = sum of 1 / (60 + rank)"
+    ],
+    "here": "BM25 and the latent semantic ranking run on the same passages and are fused with reciprocal rank fusion, k = 60. The table shows where each passage stood in each list.",
+    "differs": "The dense half uses latent semantic vectors instead of a neural encoder."
+   },
+   {
+    "id": "chunking",
+    "name": "Semantic and hierarchical chunking",
+    "approaches": [
+     "semantic-chunking",
+     "hierarchical-chunking",
+     "chunking",
+     "late-chunking"
+    ],
+    "plain": "Decide where to cut documents: by topic shifts between sentences, or as small pieces for matching inside larger pieces for reading.",
+    "paper": [
+     "Semantic: embed sentences with a window of neighbours, cut where consecutive distance exceeds a percentile (95th by default)",
+     "Hierarchical: index small child chunks, return their parent chunk"
+    ],
+    "here": "All three strategies are built from the same documents: fixed-size word windows, semantic cuts at the percentile you choose, and sentence-sized children inside larger parents. The same question is searched in each.",
+    "differs": "Sentence vectors are latent semantic vectors."
+   },
+   {
+    "id": "contextual",
+    "name": "Contextual retrieval",
+    "approaches": [
+     "contextual"
+    ],
+    "plain": "Before indexing, add a short note to each chunk saying which document it comes from and what that document is about.",
+    "paper": [
+     "A language model writes 50 to 100 tokens of context for each chunk from the whole document",
+     "The context is prepended to the chunk",
+     "Both BM25 and embeddings are built on the contextualised chunks"
+    ],
+    "here": "The same chunks are indexed twice: as plain text, and with a prefix made of the document title, its section and its opening sentence. Ranks are compared for the same question.",
+    "differs": "The prefix is assembled from the document title, section and first sentence, not written by a language model."
+   },
+   {
+    "id": "rerank",
+    "name": "Reranking RAG",
+    "approaches": [
+     "rerank",
+     "colbert"
+    ],
+    "plain": "Retrieve a wide set cheaply, then score each candidate again with a slower, more careful model and keep the best few.",
+    "paper": [
+     "First-stage retrieval returns the top N (often 100)",
+     "A cross-encoder reads question and passage together and outputs a relevance score",
+     "The top k by that score are kept"
+    ],
+    "here": "Hybrid search returns the top N; each candidate is rescored from how many question words it contains, how close together they appear and its vector similarity, and the table shows how the order changes.",
+    "differs": "The second-stage scorer is a fixed formula over coverage, word proximity and vector similarity, not a trained cross-encoder."
+   },
+   {
+    "id": "fusion",
+    "name": "Query transformation and RAG-Fusion",
+    "approaches": [
+     "multiquery",
+     "rewrite",
+     "stepback"
+    ],
+    "plain": "Search with several versions of the question, then merge the result lists.",
+    "paper": [
+     "A language model writes several rewrites of the question (RAG-Fusion), a cleaner rewrite (Rewrite-Retrieve-Read) or a more general step-back question",
+     "Each version is searched",
+     "Results are merged with reciprocal rank fusion"
+    ],
+    "here": "Versions are built from the question itself (keywords only, expanded with the nearest words in the vector space, split into clauses) plus any rewrites you write. Each is searched, then fused.",
+    "differs": "Automatic rewrites are made by rules, not by a language model. The example rewrites for the preset questions were written by hand."
+   },
+   {
+    "id": "hyde",
+    "name": "HyDE (hypothetical document embeddings)",
+    "approaches": [
+     "hyde"
+    ],
+    "plain": "Write a plausible answer first, even if some details are wrong, and search with that answer instead of the question.",
+    "paper": [
+     "An instruction-following model writes a hypothetical document answering the question",
+     "An unsupervised encoder (Contriever) embeds it",
+     "The vector, averaged with the question's, retrieves real passages; the hypothetical text is discarded"
+    ],
+    "here": "The draft answer in the box is embedded, averaged with the question vector and used for search. Results are compared with searching on the question alone.",
+    "differs": "The draft is written by you, or is an example written by hand for the preset questions; in HyDE a language model writes it."
+   },
+   {
+    "id": "late",
+    "name": "Late-interaction RAG (ColBERT)",
+    "approaches": [
+     "colbert"
+    ],
+    "plain": "Keep a vector for every word, and score a passage by how well each question word finds its best match in it.",
+    "paper": [
+     "Encode every token of every passage into its own vector",
+     "Encode every question token",
+     "Score = sum over question tokens of the maximum similarity to any passage token (MaxSim)"
+    ],
+    "here": "Each word has its own latent semantic vector. Every passage is scored with MaxSim, and the table shows which passage word each question word matched and how strongly.",
+    "differs": "Word vectors do not depend on the surrounding sentence, as BERT token vectors do; no compression (ColBERTv2) is needed at this size."
+   },
+   {
+    "id": "multihop",
+    "name": "Multi-hop RAG",
+    "approaches": [
+     "multihop",
+     "ircot",
+     "hipporag"
+    ],
+    "plain": "Answer in steps: find the first fact, then use what it says to search for the next.",
+    "paper": [
+     "Decompose into follow-up questions (Self-Ask) or interleave retrieval with each reasoning step (IRCoT)",
+     "Each hop's search includes what the previous hop found",
+     "The final answer composes the hops"
+    ],
+    "here": "Each sub-question is searched in turn. After each hop the most distinctive words of the best passage are carried into the next hop's search as bridge terms.",
+    "differs": "Sub-questions are typed by you or written by hand for the presets; without them the original question is used for every hop. Bridge terms are chosen by tf-idf, not by a model reading the passage."
+   },
+   {
+    "id": "graphrag",
+    "name": "GraphRAG",
+    "approaches": [
+     "graphrag",
+     "lightrag",
+     "kg"
+    ],
+    "plain": "Build a graph of the things the documents talk about and how they connect, then retrieve around the entities in the question, or summarise whole communities of the graph.",
+    "paper": [
+     "A language model extracts entities and relationships from every chunk",
+     "Leiden clustering groups the graph into communities",
+     "A language model writes a report for each community",
+     "Local search expands from question entities; global search maps the question over community reports and reduces the partial answers"
+    ],
+    "here": "Entities are the topics of this app (building blocks, families, concepts, methods); an edge is added whenever one topic's text names another. Local search expands from entities in the question; global search groups the graph into communities and ranks them against the question.",
+    "differs": "Entities are matched by name, not extracted by a model. Communities come from label propagation, not Leiden. Community reports list members and key terms instead of model-written summaries."
+   },
+   {
+    "id": "raptor",
+    "name": "Hierarchical RAG (RAPTOR)",
+    "approaches": [
+     "raptor"
+    ],
+    "plain": "Cluster the chunks, summarise each cluster, cluster the summaries, and search all levels at once.",
+    "paper": [
+     "Embed chunks (SBERT)",
+     "Reduce dimensions with UMAP and cluster with Gaussian mixtures",
+     "A language model summarises each cluster",
+     "Repeat on the summaries",
+     "Retrieve over the collapsed tree of every node at every level"
+    ],
+    "here": "Passages are clustered with k-means on their vectors; each cluster becomes a node whose text is the two sentences nearest its centre; the nodes are clustered again. Search covers every level, and the results show which level each hit came from.",
+    "differs": "Spherical k-means replaces UMAP plus Gaussian mixtures, so each passage belongs to one cluster only. Summaries are extracted sentences, not written by a model."
+   },
+   {
+    "id": "sql",
+    "name": "Structured or SQL RAG",
+    "approaches": [
+     "sql-rag"
+    ],
+    "plain": "When the answer lives in rows and columns, translate the question into a query, run it, and answer from the rows.",
+    "paper": [
+     "A language model writes SQL from the question and the schema",
+     "The database runs it",
+     "The rows go back to the model, which writes the answer (TAG adds model reasoning over the rows)"
+    ],
+    "here": "Questions run against the model catalog of this app (one row per model). The query is executed in your browser and the rows become the context.",
+    "differs": "The SQL for each preset question was written by hand, standing in for the text-to-SQL model. The executor supports the WHERE, GROUP BY, ORDER BY and LIMIT used here."
+   },
+   {
+    "id": "compression",
+    "name": "Contextual compression",
+    "approaches": [
+     "compression"
+    ],
+    "plain": "Keep only the sentences of the retrieved passages that help answer the question.",
+    "paper": [
+     "RECOMP: a trained extractive compressor selects sentences, or an abstractive one summarises, and may return nothing",
+     "LongLLMLingua: a small model scores tokens with question-aware perplexity, drops low-value ones and reorders documents"
+    ],
+    "here": "Every sentence of the retrieved passages is scored against the question. Sentences under the threshold are dropped; if none pass, no context is sent. The kept sentences can be ordered with the best at the start and end.",
+    "differs": "Sentences are scored by word coverage and vector similarity, not by a trained compressor or token perplexity."
+   },
+   {
+    "id": "multimodal",
+    "name": "Multimodal RAG",
+    "approaches": [
+     "multimodal",
+     "colpali"
+    ],
+    "plain": "Search images, page scans, audio or video as well as text, and answer with a model that can read them.",
+    "paper": [
+     "A multimodal encoder places images and text in one vector space (MuRAG, CLIP-style) or embeds page images directly (ColPali)",
+     "The question retrieves across media",
+     "A vision-language model reads the retrieved items"
+    ],
+    "here": "This step cannot run in this page: it needs an image or vision-language encoder, and this app has no image collection. What does run is the generator choice: which catalog models accept images or audio, with their licence status.",
+    "differs": "Retrieval over images is not performed."
+   },
+   {
+    "id": "selfrag",
+    "name": "Self-RAG",
+    "approaches": [
+     "selfrag"
+    ],
+    "plain": "The model decides whether to search, grades each passage and its own draft, and keeps the best-graded answer.",
+    "paper": [
+     "A trained model emits reflection tokens: Retrieve (search or not), IsRel (is this passage relevant), IsSup (is the draft supported) and IsUse (how useful, 1 to 5)",
+     "One draft per passage is generated and critiqued",
+     "The draft with the best weighted critique is kept"
+    ],
+    "here": "The retrieve decision, relevance, support and usefulness are computed for each passage and its best sentence, shown as a table, and the best-scoring candidate is selected.",
+    "differs": "Grades come from rules over vector similarity and word coverage, not reflection tokens from a trained model. Because candidates are extracted from their passage, support is measured as corroboration by the other retrieved passages."
+   },
+   {
+    "id": "crag",
+    "name": "Corrective RAG (CRAG)",
+    "approaches": [
+     "crag"
+    ],
+    "plain": "Grade the retrieved passages; if they are good, trim them to the useful parts; if they are bad, search somewhere else; if unsure, do both.",
+    "paper": [
+     "A fine-tuned T5 evaluator scores each retrieved document",
+     "Above the upper threshold: Correct, refine by splitting into strips and keeping relevant strips",
+     "Below the lower threshold: Incorrect, rewrite the query and use web search",
+     "In between: Ambiguous, combine both"
+    ],
+    "here": "Each passage is scored, the best score is compared with your two thresholds and the matching action runs: strip refinement, a wider search over whole documents with a rewritten query, or both.",
+    "differs": "The evaluator is vector similarity, not a trained T5 model. The wider search covers whole documents of this app instead of the web."
+   },
+   {
+    "id": "adaptive",
+    "name": "Adaptive RAG",
+    "approaches": [
+     "adaptive",
+     "flare"
+    ],
+    "plain": "Judge how hard the question is, then use no retrieval, one search, or a multi-step search accordingly.",
+    "paper": [
+     "A small trained classifier (T5) labels the question A (no retrieval), B (single-step) or C (multi-step)",
+     "Labels come from which strategy actually answered training questions correctly",
+     "The chosen strategy runs"
+    ],
+    "here": "Features of the question are measured (known words, named topics, comparison words, best match strength), a route is chosen, and that route runs.",
+    "differs": "The classifier is a set of rules over those features, not a trained model."
+   },
+   {
+    "id": "agentic",
+    "name": "Agentic RAG",
+    "approaches": [
+     "agentic"
+    ],
+    "plain": "A controller picks a tool at each step (vector search, keyword search, graph lookup, catalog query), reads what it gets back and decides whether it has enough.",
+    "paper": [
+     "A language model plans, chooses tools, observes results and iterates until it can answer or the budget runs out"
+    ],
+    "here": "A loop runs with four real tools over this app's data. At each step it measures how many question words the evidence covers and picks the next tool; the trace shows every action and observation.",
+    "differs": "The controller is a fixed policy, not a language model choosing tools."
+   },
+   {
+    "id": "memory",
+    "name": "Memory-augmented RAG",
+    "approaches": [
+     "memory",
+     "hipporag"
+    ],
+    "plain": "Remember earlier questions and associations, so follow-ups like \"what does it cost?\" retrieve the right material.",
+    "paper": [
+     "MemoRAG: a light long-context model forms a global memory and drafts clues that guide retrieval",
+     "HippoRAG 2: Personalized PageRank over an entity and passage graph acts as associative long-term memory",
+     "MemGPT: the model manages its own tiered memory"
+    ],
+    "here": "Each question you ask here is stored in a short conversation memory. A follow-up borrows the topics of earlier turns, and Personalized PageRank over the topic graph spreads from those topics to related ones before retrieval.",
+    "differs": "The memory holds topics and words from earlier turns, not a compressed model state. It lives only in this page and is cleared on reload."
+   },
+   {
+    "id": "rl",
+    "name": "Reinforcement-learning RAG",
+    "approaches": [
+     "rl-rag"
+    ],
+    "plain": "Learn, by trial and reward, which search behaviour finds the right material.",
+    "paper": [
+     "Search-R1 and R1-Searcher train the language model with policy-gradient reinforcement learning (Search-R1 reports PPO and GRPO) to issue search calls during reasoning, rewarded on the final answer",
+     "DeepRetrieval rewards the generated query by retrieval recall"
+    ],
+    "here": "A small policy learns, with REINFORCE and a reward equal to the reciprocal rank of the correct document, which of four search strategies to use for each kind of question. Training and the held-out score run in your browser.",
+    "differs": "The policy chooses among four strategies for four question types; it does not train language model weights or write queries."
+   }
+  ]
+ },
+ "labQueries": [
+  {
+   "q": "How does grouped-query attention shrink the key-value cache?",
+   "hyde": "Grouped-query attention lets several query heads share one key head and one value head. Because fewer key and value vectors are stored for each token, the key-value cache is smaller and grows more slowly with context length.",
+   "rewrites": [
+    "grouped-query attention shared key value heads",
+    "why is the KV cache smaller with fewer key and value heads"
+   ],
+   "subqs": [
+    "What is the key-value cache?",
+    "How does grouped-query attention change the number of key and value heads?"
+   ]
+  },
+  {
+   "q": "Which retrieval approach suits questions that need facts from several documents?",
+   "hyde": "Questions that combine facts from several documents need retrieval in steps: find the first fact, then use it to search for the next. Iterative retrieval, sub-question decomposition and graph-based retrieval handle this better than a single search.",
+   "rewrites": [
+    "multi-hop question retrieval several steps",
+    "combine evidence from multiple passages"
+   ],
+   "subqs": [
+    "What makes a question multi-hop?",
+    "Which retrieval approaches search in several steps?"
+   ]
+  },
+  {
+   "q": "When is a LoRA adapter preferable to full fine-tuning?",
+   "hyde": "A LoRA adapter trains small low-rank matrices while the base weights stay frozen, so it needs far less memory and storage than full fine-tuning. Full fine-tuning changes every weight and suits large shifts in behaviour when there is enough data and hardware.",
+   "rewrites": [
+    "LoRA low-rank adapter frozen weights memory",
+    "full fine-tuning cost compared with adapters"
+   ],
+   "subqs": [
+    "What does a LoRA adapter train?",
+    "What does full fine-tuning change and what does it cost?"
+   ]
+  },
+  {
+   "q": "Why does sliding-window attention save memory, and what does it give up?",
+   "hyde": "With sliding-window attention each token only attends to a fixed number of recent tokens, so the cache for those layers stops growing beyond the window. The cost is that those layers cannot directly see distant tokens, which is why models mix in some global attention layers.",
+   "rewrites": [
+    "sliding window attention cache memory",
+    "local attention layers cannot see distant tokens"
+   ],
+   "subqs": [
+    "How does sliding-window attention limit what each token sees?",
+    "Why do models mix window layers with global attention layers?"
+   ]
+  },
+  {
+   "q": "How does a mixture-of-experts model decide which experts run for a token?",
+   "hyde": "A router scores every expert for each token and only the top few experts run. The rest of the experts stay idle for that token, so the active parameters are a small share of the total.",
+   "rewrites": [
+    "router selects top-k experts per token",
+    "active parameters versus total parameters in mixture of experts"
+   ],
+   "subqs": [
+    "What does the router do?",
+    "How many experts are active for each token?"
+   ]
+  }
+ ],
+ "memoryFollowUps": [
+  "What does it cost in quality?",
+  "Which families use it?",
+  "How does it affect memory at long context?"
+ ],
+ "sqlPresets": [
+  {
+   "id": "vision-commercial",
+   "question": "Which models accept images and allow commercial use, longest context first?",
+   "sql": "SELECT name, publisher, context, licence\nFROM models\nWHERE vision = TRUE AND commercial = 'allowed'\nORDER BY context DESC\nLIMIT 10;",
+   "select": [
+    "name",
+    "publisher",
+    "context",
+    "licence"
+   ],
+   "where": [
+    [
+     "vision",
+     "=",
+     true
+    ],
+    [
+     "commercial",
+     "=",
+     "allowed"
+    ]
+   ],
+   "order": [
+    "context",
+    "desc"
+   ],
+   "limit": 10
+  },
+  {
+   "id": "moe-small-active",
+   "question": "Which mixture-of-experts models activate fewer than 5 billion parameters per token?",
+   "sql": "SELECT name, publisher, total_params_b, active_params_b\nFROM models\nWHERE class LIKE '%MoE%' AND active_params_b < 5\nORDER BY active_params_b ASC\nLIMIT 15;",
+   "select": [
+    "name",
+    "publisher",
+    "total_params_b",
+    "active_params_b"
+   ],
+   "where": [
+    [
+     "class",
+     "like",
+     "MoE"
+    ],
+    [
+     "active_params_b",
+     "<",
+     5
+    ]
+   ],
+   "order": [
+    "active_params_b",
+    "asc"
+   ],
+   "limit": 15
+  },
+  {
+   "id": "small-cache-long",
+   "question": "At 128K context or more, which models store the least key-value cache per token?",
+   "sql": "SELECT name, publisher, context, kv_kib_per_token\nFROM models\nWHERE context >= 131072 AND kv_kib_per_token IS NOT NULL\nORDER BY kv_kib_per_token ASC\nLIMIT 10;",
+   "select": [
+    "name",
+    "publisher",
+    "context",
+    "kv_kib_per_token"
+   ],
+   "where": [
+    [
+     "context",
+     ">=",
+     131072
+    ],
+    [
+     "kv_kib_per_token",
+     "notnull",
+     null
+    ]
+   ],
+   "order": [
+    "kv_kib_per_token",
+    "asc"
+   ],
+   "limit": 10
+  },
+  {
+   "id": "per-publisher",
+   "question": "Which publishers have the most models in the catalog?",
+   "sql": "SELECT publisher, COUNT(*) AS models\nFROM models\nGROUP BY publisher\nORDER BY models DESC\nLIMIT 10;",
+   "select": [
+    "publisher",
+    "models"
+   ],
+   "where": [],
+   "group": "publisher",
+   "order": [
+    "models",
+    "desc"
+   ],
+   "limit": 10
+  },
+  {
+   "id": "by-class",
+   "question": "How many models of each architecture class are there, and what is their median context?",
+   "sql": "SELECT class, COUNT(*) AS models, MEDIAN(context) AS median_context\nFROM models\nGROUP BY class\nORDER BY models DESC;",
+   "select": [
+    "class",
+    "models",
+    "median_context"
+   ],
+   "where": [],
+   "group": "class",
+   "median": "context",
+   "order": [
+    "models",
+    "desc"
+   ],
+   "limit": 20
+  }
+ ]
+}

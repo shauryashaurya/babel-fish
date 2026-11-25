@@ -1,0 +1,378 @@
+{
+  "intro": {
+    "what": "Fine-tuning means continuing to train an existing model on your own examples so it changes how it behaves.",
+    "analogy": "Think of hiring an experienced employee. Prompting is giving them instructions for one task. Retrieval is handing them the reference manual. Fine-tuning is sending them on a training course that changes their habits.",
+    "goodFor": [
+      "A consistent output format or tone",
+      "A narrow, repeated task with clear right answers",
+      "Making a small model perform well enough to replace a large one",
+      "Reducing long prompts that repeat on every request"
+    ],
+    "badFor": [
+      "Facts that change, which belong in retrieval",
+      "Fixing a task you have not yet measured",
+      "Situations with few or inconsistent examples",
+      "Adding broad new capability to a weak model"
+    ]
+  },
+  "ladder": {
+    "title": "Try the cheapest option first",
+    "note": "Move to the next step only if a measured evaluation shows the current one falls short.",
+    "steps": [
+      {
+        "name": "Better prompt",
+        "text": "Clear instructions and a few examples. No training, and it can be changed in minutes."
+      },
+      {
+        "name": "Retrieval (RAG)",
+        "text": "Fetch relevant documents at request time. Use this when the model lacks knowledge."
+      },
+      {
+        "name": "Adapter fine-tuning",
+        "text": "Train a small add-on with LoRA. Use this when the model knows enough but behaves wrongly."
+      },
+      {
+        "name": "Full fine-tuning",
+        "text": "Update all weights. Use it only when an adapter cannot reach your target."
+      },
+      {
+        "name": "Distillation",
+        "text": "Train a small model on a larger model's outputs, to cut serving cost after quality is proven."
+      }
+    ]
+  },
+  "methods": [
+    {
+      "id": "prefix",
+      "name": "Prefix tuning",
+      "what": "Learns a few extra trainable tokens placed before the input. The model's weights do not change.",
+      "best": "Very small data and light steering",
+      "data": "Tens to hundreds of examples",
+      "strength": "Tiny artifact and no risk to base weights",
+      "limit": "Limited ability to change behaviour",
+      "source": {
+        "title": "Prefix-Tuning",
+        "url": "https://arxiv.org/abs/2101.00190"
+      }
+    },
+    {
+      "id": "lora",
+      "name": "LoRA adapter",
+      "what": "Freezes the model and trains a small low-rank add-on for selected layers.",
+      "best": "The default for most enterprise fine-tuning",
+      "data": "Hundreds to thousands of examples",
+      "strength": "Small, swappable adapters that leave the base weights untouched",
+      "limit": "Bounded by the adapter's rank and by what the base model can already do",
+      "source": {
+        "title": "LoRA: Low-Rank Adaptation",
+        "url": "https://arxiv.org/abs/2106.09685"
+      }
+    },
+    {
+      "id": "qlora",
+      "name": "QLoRA",
+      "what": "LoRA on a base model held in 4-bit memory, so a larger model can be trained on a smaller GPU.",
+      "best": "Limited GPU memory",
+      "data": "Hundreds to thousands of examples",
+      "strength": "Much lower training memory",
+      "limit": "Slower steps, and quantization can affect results",
+      "source": {
+        "title": "QLoRA",
+        "url": "https://arxiv.org/abs/2305.14314"
+      }
+    },
+    {
+      "id": "full",
+      "name": "Full fine-tuning",
+      "what": "Updates every parameter in the model.",
+      "best": "Large datasets and deep behaviour change",
+      "data": "Thousands to millions of examples",
+      "strength": "The most flexible option",
+      "limit": "Highest cost, and every weight can drift, so there is no simple way to undo it",
+      "source": {
+        "title": "Training language models to follow instructions",
+        "url": "https://arxiv.org/abs/2203.02155"
+      }
+    },
+    {
+      "id": "dpo",
+      "name": "Preference tuning (DPO)",
+      "what": "Trains on pairs of a better and a worse answer rather than a single correct one.",
+      "best": "Tone, helpfulness and policy behaviour",
+      "data": "Thousands of ranked pairs",
+      "strength": "Captures preferences that are hard to write as one right answer",
+      "limit": "Ranked data is costly, and it can over-optimize for style",
+      "source": {
+        "title": "Direct Preference Optimization",
+        "url": "https://arxiv.org/abs/2305.18290"
+      }
+    },
+    {
+      "id": "distill",
+      "name": "Distillation",
+      "what": "Trains a small student model to imitate a larger teacher model.",
+      "best": "Cutting serving cost at scale",
+      "data": "Large volumes of teacher outputs",
+      "strength": "Can move proven quality into a much cheaper model",
+      "limit": "Inherits teacher errors, and licences may prohibit it",
+      "source": {
+        "title": "Distilling the Knowledge in a Neural Network",
+        "url": "https://arxiv.org/abs/1503.02531"
+      }
+    }
+  ],
+  "benefits": [
+    "More consistent format and tone",
+    "Shorter prompts, so fewer tokens per request",
+    "Lower latency and cost if a smaller model becomes good enough",
+    "Better accuracy on a narrow, stable task",
+    "Can run privately on your own infrastructure"
+  ],
+  "limitations": [
+    "It does not reliably teach new facts, and it cannot stay current without retraining",
+    "The model can get worse at things outside your training data",
+    "Quality is capped by the quality and consistency of your examples",
+    "Every base model upgrade means re-running the work",
+    "You now own evaluation, versioning and monitoring"
+  ],
+  "risks": [
+    {
+      "title": "Safety guardrails can weaken",
+      "text": "Published research found that fine-tuning can degrade a model's safety alignment, even with benign data and no intent to do so. Re-run safety tests after every fine-tune.",
+      "source": {
+        "title": "Fine-tuning Aligned Language Models Compromises Safety",
+        "url": "https://arxiv.org/abs/2310.03693"
+      }
+    },
+    {
+      "title": "Catastrophic forgetting",
+      "text": "Neural networks tend to lose earlier abilities when trained on new data. Always test what the model could do before, not only the new task.",
+      "source": {
+        "title": "Overcoming catastrophic forgetting in neural networks",
+        "url": "https://arxiv.org/abs/1612.00796"
+      }
+    },
+    {
+      "title": "Training data can leak",
+      "text": "Language models can memorize and reproduce training examples. Treat a model fine-tuned on sensitive data as sensitive itself.",
+      "source": {
+        "title": "Extracting Training Data from Large Language Models",
+        "url": "https://arxiv.org/abs/2012.07805"
+      }
+    },
+    {
+      "title": "Overfitting",
+      "text": "With too few examples or too many steps, the model memorizes the training set and does worse on new inputs. Always hold out test data the model never sees."
+    },
+    {
+      "title": "Licence obligations carry over",
+      "text": "A fine-tuned model is usually a derivative. Some licences require naming rules or attribution, and some forbid commercial use altogether. Check the base model's card in this app."
+    },
+    {
+      "title": "Stale models",
+      "text": "A fine-tune freezes knowledge and behaviour at training time. Plan for monitoring and retraining as your data and policies change."
+    }
+  ],
+  "checklist": [
+    "Baseline measured on the untuned model",
+    "Held-out test set that training never sees",
+    "Regression test for abilities you must keep",
+    "Safety tests re-run after tuning",
+    "Base model licence permits derivatives for your use",
+    "Data rights confirmed for every training example",
+    "Adapter, data and base checkpoint versioned together",
+    "Rollback path to the base model"
+  ],
+  "slmGuide": {
+    "what": "A small language model is a language model compact enough to run on a single modest GPU, and often on a laptop or phone. In this app, it means 10 billion parameters or fewer.",
+    "analogy": "A large model is a general hospital. A small model is a focused clinic: cheaper, quicker and closer to you, but it will refer the hard cases elsewhere.",
+    "strengths": [
+      "Runs on inexpensive hardware, or on-device",
+      "Lower latency and lower cost per request",
+      "Data can stay private on your own systems",
+      "Fast and affordable to fine-tune for one task",
+      "Well suited to high-volume, repetitive agent steps"
+    ],
+    "weaknesses": [
+      "Weaker general reasoning and broad knowledge",
+      "More likely to make errors on complex, multi-step problems",
+      "Often shorter usable context",
+      "More sensitive to how prompts are worded",
+      "Safety behaviour can be less robust"
+    ],
+    "useWhen": [
+      "The task is narrow and repeated",
+      "Latency, cost or privacy is the main constraint",
+      "You can test accuracy on real examples",
+      "A larger model can handle escalations"
+    ],
+    "avoidWhen": [
+      "Mistakes are severe and cannot be caught",
+      "The task needs broad knowledge or long reasoning",
+      "Inputs vary widely and unpredictably"
+    ],
+    "pattern": "A common design is to route routine requests to a small model and escalate hard ones to a large model.",
+    "source": {
+      "title": "Small Language Models are the Future of Agentic AI",
+      "url": "https://arxiv.org/abs/2506.02153"
+    },
+    "rankingNote": "Candidates come from a search of 57 official publisher accounts on Hugging Face, ranked by adoption (30-day Hugging Face downloads and likes). Popularity is not a measure of quality. To keep the list varied, each publisher is capped at 12 models, and near-identical variants are grouped.",
+    "fitNote": "Memory = (weights + attention cache for one session) × 1.25. Lower precision estimates assume you convert the model and should be tested for quality loss.",
+    "patterns": [
+      {
+        "title": "Route and escalate",
+        "text": "A small model handles routine requests and passes uncertain or complex ones to a larger model. Measure how often it escalates and how often it should have."
+      },
+      {
+        "title": "Specialize with an adapter",
+        "text": "Fine-tune a small model for one narrow task, such as classification or extraction. A tuned small model can match a general large model on that task only, which must be shown on your test set."
+      },
+      {
+        "title": "Run on the device",
+        "text": "Keep data on a laptop, phone or edge box. Memory bandwidth sets the speed ceiling, and quantization usually decides whether it fits."
+      },
+      {
+        "title": "Distil from a larger model",
+        "text": "Generate training data with a large model and train the small one to imitate it. Check that the large model's licence allows its outputs to train other models."
+      },
+      {
+        "title": "Pair with retrieval",
+        "text": "A small model with good retrieval can answer questions about your documents without memorizing them. Retrieval quality then matters more than model size."
+      }
+    ],
+    "quantNote": "Real quantization methods such as GPTQ, AWQ and the NF4 format used by QLoRA go further than plain rounding, for example by correcting errors layer by layer or by placing levels where weights are dense. Always compare task accuracy before and after.",
+    "deployNote": "The speed column is a ceiling set by memory bandwidth, not a measurement. Measure on the target device before committing."
+  },
+  "stages": [
+    {
+      "id": "data",
+      "title": "Prepare the examples",
+      "summary": "Collect input and ideal-output pairs that show exactly the behaviour you want, then split them before training starts.",
+      "detail": [
+        "Each example is a short conversation: optional system instructions, a user message and the ideal assistant reply.",
+        "Remove duplicates, personal data you have no right to use, and examples that contradict each other. The model learns inconsistency as faithfully as consistency.",
+        "Split once, at the start: a training set, a validation set used during training, and a test set that is opened only for the final decision."
+      ],
+      "watch": "If near-duplicates of test examples sit in the training set, test scores will look better than real-world performance."
+    },
+    {
+      "id": "template",
+      "title": "Apply the chat template",
+      "summary": "The conversation is turned into one long string using the base model's own markers for each role, then cut into tokens.",
+      "detail": [
+        "Every model family was trained with its own markers for where a system, user or assistant turn starts and ends. The template is published with the model's tokenizer.",
+        "The tokenizer then splits the text into tokens, usually pieces of words, and replaces each with its number in the vocabulary.",
+        "Training and serving must use the same template. A mismatch does not raise an error; it quietly lowers quality."
+      ],
+      "watch": "Use the base model's published template. Do not invent markers.",
+      "source": {
+        "title": "Hugging Face: chat templates",
+        "url": "https://huggingface.co/docs/transformers/main/en/chat_templating"
+      }
+    },
+    {
+      "id": "mask",
+      "title": "Choose which tokens teach",
+      "summary": "Each token gets a label: the token that should come next. Tokens the model should not learn to write are given a label that the loss ignores.",
+      "detail": [
+        "The usual choice is to learn only from the assistant's reply. The system and user tokens are still read by the model, but they add nothing to the loss.",
+        "In PyTorch, a label of -100 is ignored by the cross-entropy loss by default, which is how most training code masks tokens.",
+        "Training on the prompt as well teaches the model to imitate user messages, which is rarely the goal."
+      ],
+      "watch": "Check a few masked examples by eye before a long run. A wrong mask is a silent and expensive bug.",
+      "source": {
+        "title": "PyTorch CrossEntropyLoss (ignore_index = -100)",
+        "url": "https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html"
+      }
+    },
+    {
+      "id": "loss",
+      "title": "Forward pass and loss",
+      "summary": "The model reads the tokens and, at every position, gives a probability to each possible next token. The loss measures how little probability it gave to the right one.",
+      "detail": [
+        "For each counted token, the loss is minus the logarithm of the probability given to the correct token. A confident right answer costs almost nothing; a confident wrong answer costs a lot.",
+        "The batch loss is the average over all counted tokens. Perplexity is e raised to that loss, and can be read as how many choices the model was effectively unsure between."
+      ],
+      "watch": "A training loss falling towards zero while validation loss rises is memorization, not learning."
+    },
+    {
+      "id": "backward",
+      "title": "Backward pass",
+      "summary": "Backpropagation works out, for every trainable number, which direction would have lowered the loss and by how much.",
+      "detail": [
+        "Only trainable weights get gradients. With LoRA the original matrices are frozen, and gradients flow only into the two small adapter matrices.",
+        "The values computed on the way forward (activations) are kept in memory so the backward pass can use them. This is often the largest memory cost, and gradient checkpointing trades recomputation for memory."
+      ],
+      "watch": "Memory grows with batch size times sequence length. Out-of-memory errors usually come from activations, not weights."
+    },
+    {
+      "id": "update",
+      "title": "Update the weights",
+      "summary": "The optimizer turns gradients into a small step. The learning-rate schedule decides how big that step is at each point in training.",
+      "detail": [
+        "AdamW keeps a running average of each weight's gradient and of its squared gradient, which is why it needs two extra numbers per trainable weight.",
+        "Weight decay gently pulls weights towards zero, separately from the gradient step.",
+        "A short warm-up avoids large, destabilizing steps at the start; the rate then usually decays towards the end."
+      ],
+      "watch": "Too high a learning rate causes forgetting or divergence. Too low wastes the run.",
+      "source": {
+        "title": "Decoupled Weight Decay Regularization (AdamW)",
+        "url": "https://arxiv.org/abs/1711.05101"
+      }
+    },
+    {
+      "id": "evaluate",
+      "title": "Evaluate and keep the best checkpoint",
+      "summary": "At regular intervals, measure the validation set and save a checkpoint. Keep the checkpoint that scores best on your task metric, not the last one.",
+      "detail": [
+        "Track three things: the new task, the abilities you must keep (regression tests), and safety tests.",
+        "Stop early when validation stops improving. Further steps usually only add memorization."
+      ],
+      "watch": "Validation loss is a proxy. The final decision should use the task metric on the untouched test set."
+    },
+    {
+      "id": "serve",
+      "title": "Merge or serve the adapter",
+      "summary": "A LoRA adapter can be added into the base weights for serving, or kept separate so several adapters can share one base model.",
+      "detail": [
+        "Merged, the model runs exactly as fast as the base model, because the adapter becomes part of the same matrices.",
+        "Kept separate, one copy of the base model can serve many task adapters, and an adapter can be removed instantly to roll back."
+      ],
+      "watch": "Version the base checkpoint, adapter, data and template together. An adapter is only valid on the exact base it was trained on.",
+      "source": {
+        "title": "LoRA: Low-Rank Adaptation of Large Language Models",
+        "url": "https://arxiv.org/abs/2106.09685"
+      }
+    }
+  ],
+  "example": {
+    "system": "Classify the customer email. Reply with the label, a colon and a short reason.",
+    "user": "My card was charged twice for the same order.",
+    "assistant": "billing_dispute: duplicate charge reported",
+    "templateNote": "Shown with the ChatML markers used by Qwen models. Other model families use different markers, and the base model's tokenizer defines them. Words and punctuation stand in for tokens here; real tokenizers split text into sub-word pieces."
+  },
+  "lora": {
+    "intro": "LoRA leaves each original weight matrix W frozen and learns a correction made of two thin matrices, B and A. Only B and A are trained. Their product has at most r independent directions, which is what limits and regularizes the change.",
+    "note": "Adapter sizes use the selected model's published dimensions. The small grids are generated numbers that show the shapes involved; they are not real weights. B starts at zero, so training begins from exactly the base model.",
+    "source": {
+      "title": "LoRA: Low-Rank Adaptation of Large Language Models",
+      "url": "https://arxiv.org/abs/2106.09685"
+    }
+  },
+  "dpo": {
+    "intro": "Preference tuning learns from pairs: the same prompt with a preferred and a rejected answer. DPO raises the probability of the preferred answer relative to a frozen copy of the starting model, and lowers the rejected one, without training a separate reward model.",
+    "note": "The values here are inputs you set, not outputs of a model. The loss and weighting are the formulas from the DPO paper.",
+    "source": {
+      "title": "Direct Preference Optimization",
+      "url": "https://arxiv.org/abs/2305.18290"
+    }
+  },
+  "schedule": {
+    "intro": "The learning rate sets the size of each update. Most fine-tuning runs warm up from zero, then decay.",
+    "note": "Linear warm-up followed by cosine, linear or constant decay, as implemented in common training libraries.",
+    "source": {
+      "title": "Hugging Face: optimizer schedules",
+      "url": "https://huggingface.co/docs/transformers/main/en/main_classes/optimizer_schedules"
+    }
+  }
+}

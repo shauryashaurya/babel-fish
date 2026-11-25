@@ -1,0 +1,440 @@
+{
+ "reviewedOn": "2026-11-23",
+ "basis": "Plain-language reading of each published licence text. Not legal advice.",
+ "rules": {
+  "apache-2.0": {
+   "name": "Apache License 2.0",
+   "commercial": "allowed",
+   "summary": "Commercial use, modification and redistribution permitted.",
+   "obligations": [
+    "Keep licence and notices",
+    "Mark modified files"
+   ]
+  },
+  "mit": {
+   "name": "MIT License",
+   "commercial": "allowed",
+   "summary": "Commercial use, modification and redistribution permitted.",
+   "obligations": [
+    "Keep copyright and licence notice"
+   ]
+  },
+  "openmdw-1.1": {
+   "name": "OpenMDW License 1.1",
+   "commercial": "allowed",
+   "summary": "Permissive licence for model materials.",
+   "obligations": [
+    "Keep licence with redistributed materials"
+   ]
+  },
+  "modified-mit-kimi": {
+   "name": "Modified MIT License (Moonshot AI)",
+   "commercial": "allowed",
+   "summary": "MIT terms with one display condition for very large products.",
+   "obligations": [
+    "Display the model name in products above 100M monthly active users or US$20M monthly revenue"
+   ]
+  },
+  "modified-mit-minimax": {
+   "name": "Modified MIT License (MiniMax)",
+   "commercial": "allowed",
+   "summary": "MIT terms with one display condition for very large products.",
+   "obligations": [
+    "Display the model name in products above 100M monthly active users or US$30M annual recurring revenue"
+   ]
+  },
+  "minimax-model": {
+   "name": "MiniMax Model License",
+   "commercial": "allowed",
+   "summary": "Worldwide royalty-free licence with a prohibited-uses policy.",
+   "obligations": [
+    "Include the MiniMax attribution notice when redistributing",
+    "Comply with the Prohibited Uses Policy"
+   ]
+  },
+  "minimax-m2.7-nc": {
+   "name": "MiniMax M2.7 Non-Commercial License",
+   "commercial": "prohibited",
+   "summary": "Commercial use requires prior written authorization from MiniMax.",
+   "obligations": []
+  },
+  "minimax-community": {
+   "name": "MiniMax Community License",
+   "commercial": "conditional",
+   "summary": "Commercial use requires a notice to MiniMax, and written authorization when the product earns over US$20M a year.",
+   "revenueLimit": {
+    "amount": 20000000,
+    "currency": "USD",
+    "scope": "product"
+   },
+   "obligations": [
+    "Display \"Built with\" the model name",
+    "Send MiniMax a one-time licensing notice"
+   ]
+  },
+  "deepseek-1.0": {
+   "name": "DeepSeek License Agreement v1.0",
+   "commercial": "allowed",
+   "summary": "Royalty-free licence with use-based restrictions, including military use.",
+   "obligations": [
+    "Pass the use restrictions on to downstream users"
+   ],
+   "restrictions": [
+    "No military use",
+    "Other uses listed in Attachment A"
+   ]
+  },
+  "gemma": {
+   "name": "Gemma Terms of Use",
+   "commercial": "allowed",
+   "summary": "Commercial use permitted under Google's terms and Prohibited Use Policy.",
+   "obligations": [
+    "Pass the use restrictions on in downstream agreements",
+    "Provide notice of the Gemma terms when distributing"
+   ],
+   "restrictions": [
+    "Gemma Prohibited Use Policy applies"
+   ]
+  },
+  "llama3": {
+   "name": "Llama 3 Community License",
+   "commercial": "conditional",
+   "summary": "Commercial use permitted unless the organization had over 700M monthly active users at the release date.",
+   "mauLimit": 700000000,
+   "obligations": [
+    "Display \"Built with Meta Llama 3\" when distributing",
+    "Provide a copy of the agreement"
+   ],
+   "restrictions": [
+    "Acceptable Use Policy applies"
+   ]
+  },
+  "llama3.2": {
+   "name": "Llama 3.2 Community License",
+   "commercial": "conditional",
+   "summary": "Commercial use permitted unless the organization had over 700M monthly active users at the release date.",
+   "mauLimit": 700000000,
+   "obligations": [
+    "Display \"Built with Llama\" when distributing",
+    "Provide a copy of the agreement"
+   ],
+   "restrictions": [
+    "Acceptable Use Policy applies"
+   ]
+  },
+  "llama4": {
+   "name": "Llama 4 Community License",
+   "commercial": "conditional",
+   "summary": "Commercial use permitted unless the organization had over 700M monthly active users at the release date.",
+   "mauLimit": 700000000,
+   "obligations": [
+    "Display \"Built with Llama\" when distributing",
+    "Provide a copy of the agreement"
+   ],
+   "restrictions": [
+    "Acceptable Use Policy applies"
+   ]
+  },
+  "kimi-k3": {
+   "name": "Kimi K3 License",
+   "commercial": "conditional",
+   "summary": "Commercial use permitted. Model-as-a-service businesses above US$20M revenue need a separate agreement.",
+   "maasRevenueLimit": 20000000,
+   "obligations": [
+    "Display the model name in products above 100M monthly active users or US$20M monthly revenue"
+   ]
+  },
+  "ernie-5.5": {
+   "name": "ERNIE 5.5 Flash Base Model License v1.0",
+   "commercial": "conditional",
+   "summary": "Not licensed in the EU, UK or South Korea. Related revenue above US$50M needs written authorization.",
+   "excludedRegions": [
+    "EU",
+    "UK",
+    "KR"
+   ],
+   "revenueLimit": {
+    "amount": 50000000,
+    "currency": "USD",
+    "scope": "product"
+   },
+   "obligations": [
+    "Meet the attribution terms in Section 3.2",
+    "Send a one-time use notice"
+   ],
+   "restrictions": [
+    "Acceptable Use Policy applies"
+   ]
+  },
+  "grok-2-community": {
+   "name": "Grok 2 Community License",
+   "commercial": "conditional",
+   "summary": "Commercial use permitted under xAI's Acceptable Use Policy. Outputs may not train other general-purpose models.",
+   "obligations": [
+    "Display \"Powered by xAI\""
+   ],
+   "restrictions": [
+    "Materials and outputs may not train or improve other foundation models",
+    "Acceptable Use Policy applies"
+   ]
+  },
+  "research-rail": {
+   "name": "Research-Only RAIL Model License",
+   "commercial": "prohibited",
+   "summary": "Limited to academic or research purposes.",
+   "obligations": []
+  },
+  "lfm-1.0": {
+   "name": "LFM Open License v1.0",
+   "commercial": "conditional",
+   "summary": "Commercial use is licensed only for organizations under US$10M annual revenue.",
+   "revenueLimit": {
+    "amount": 10000000,
+    "currency": "USD",
+    "scope": "organization"
+   },
+   "obligations": [
+    "Keep licence and notices",
+    "Mark modified files"
+   ]
+  },
+  "mistral-ecosystem": {
+   "name": "Mistral Ecosystem Open-Weight License",
+   "commercial": "conditional",
+   "summary": "Commercial use permitted. Model-as-a-service businesses need a separate licence.",
+   "maasRequiresLicense": true,
+   "obligations": [
+    "Keep the attribution notice"
+   ]
+  },
+  "motif-nc": {
+   "name": "Motif Technologies Non-Commercial License",
+   "commercial": "prohibited",
+   "summary": "Personal, educational and non-commercial research use only.",
+   "obligations": []
+  },
+  "muse": {
+   "name": "Muse Model License",
+   "commercial": "conditional",
+   "summary": "Commercial use permitted. Model-as-a-service businesses above US$20M revenue need a separate agreement.",
+   "maasRevenueLimit": 20000000,
+   "obligations": [
+    "Display \"Built with Muse Spark Open\""
+   ],
+   "restrictions": [
+    "Acceptable Use Policy applies"
+   ]
+  },
+  "nvidia-nemotron": {
+   "name": "NVIDIA Nemotron Open Model License",
+   "commercial": "allowed",
+   "summary": "Commercially usable, with freedom to create and distribute derivatives.",
+   "obligations": [
+    "Include the NVIDIA attribution notice when distributing"
+   ]
+  },
+  "qwen-community": {
+   "name": "Qwen Community License 1.0",
+   "commercial": "conditional",
+   "summary": "Commercial use permitted. Model-as-a-service or AI work assistant businesses need a separate licence.",
+   "maasRequiresLicense": true,
+   "obligations": [
+    "Display the model name in products above 100M monthly active users or US$20M monthly revenue"
+   ]
+  },
+  "upstage-solar": {
+   "name": "Upstage Solar License",
+   "commercial": "allowed",
+   "summary": "Apache 2.0 based, with naming and attribution conditions for derivative models.",
+   "obligations": [
+    "Derivative model names must begin with \"Solar\"",
+    "Display \"Built with Solar\" for derivative models"
+   ]
+  },
+  "tencent-hy-community": {
+   "name": "Tencent Hy Community License",
+   "commercial": "conditional",
+   "summary": "Not licensed in the EU, UK or South Korea. Over 100M monthly active users needs a licence from Tencent.",
+   "excludedRegions": [
+    "EU",
+    "UK",
+    "KR"
+   ],
+   "mauLimit": 100000000,
+   "obligations": [
+    "Mark products \"Powered by Tencent Hy\"",
+    "Publish a statement about using the model when distributing",
+    "Disclose required information to end users of third-party services"
+   ]
+  },
+  "tencent-hy-1.0": {
+   "name": "Tencent Hy License 1.0",
+   "commercial": "conditional",
+   "summary": "Model-as-a-service businesses above US$50M revenue or 100M monthly active users need a separate licence. Internal use is exempt.",
+   "maasRevenueLimit": 50000000,
+   "maasMauLimit": 100000000,
+   "obligations": [
+    "Keep licence and notices",
+    "Mark modified files"
+   ]
+  },
+  "nxai-community": {
+   "name": "NXAI Community License",
+   "commercial": "conditional",
+   "summary": "Organizations above EUR 100M revenue need a commercial licence to include it in a commercial product.",
+   "revenueLimit": {
+    "amount": 100000000,
+    "currency": "EUR",
+    "scope": "organization"
+   },
+   "obligations": [
+    "Display \"Built with technology from NXAI\"",
+    "Provide a copy of the agreement"
+   ]
+  },
+  "cc-by-nc-4.0": {
+   "name": "Creative Commons Attribution-NonCommercial 4.0",
+   "commercial": "prohibited",
+   "summary": "Non-commercial use only.",
+   "obligations": [
+    "Give attribution"
+   ]
+  },
+  "closed-beta": {
+   "name": "Closed beta (no final licence published)",
+   "commercial": "unverified",
+   "summary": "The model card says a permissive licence will follow. No terms are published yet.",
+   "obligations": []
+  },
+  "stepfun-community": {
+   "name": "StepFun Community License",
+   "commercial": "unverified",
+   "summary": "Named on the model card, but the linked licence file could not be retrieved.",
+   "obligations": []
+  },
+  "unavailable": {
+   "name": "No licence published",
+   "commercial": "unverified",
+   "summary": "No official model repository or licence was found.",
+   "obligations": []
+  },
+  "llama3.1": {
+   "name": "Llama 3.1 Community License",
+   "commercial": "conditional",
+   "summary": "Commercial use permitted unless the organization had over 700M monthly active users at the release date.",
+   "mauLimit": 700000000,
+   "obligations": [
+    "Display \"Built with Llama\" when distributing",
+    "Provide a copy of the agreement",
+    "Models improved with Llama must have names beginning with \"Llama\""
+   ],
+   "restrictions": [
+    "Acceptable Use Policy applies"
+   ]
+  },
+  "llama2": {
+   "name": "Llama 2 Community License",
+   "commercial": "conditional",
+   "summary": "Commercial use permitted unless the organization had over 700M monthly active users. Outputs may not improve other large language models.",
+   "mauLimit": 700000000,
+   "obligations": [
+    "Provide a copy of the agreement"
+   ],
+   "restrictions": [
+    "Materials and outputs may not improve other large language models",
+    "Acceptable Use Policy applies"
+   ]
+  },
+  "qwen-research": {
+   "name": "Qwen Research License",
+   "commercial": "prohibited",
+   "summary": "Limited to research or evaluation. Other uses need a separate licence.",
+   "obligations": [
+    "Display \"Built with Qwen\" or \"Improved using Qwen\" on derived models"
+   ]
+  },
+  "exaone-nc": {
+   "name": "EXAONE AI Model License 1.1 - NC",
+   "commercial": "prohibited",
+   "summary": "Research use only, including for modified versions.",
+   "obligations": [
+    "Modified model names must begin with \"EXAONE\""
+   ]
+  },
+  "nvidia-open-model": {
+   "name": "NVIDIA Open Model License",
+   "commercial": "allowed",
+   "summary": "Commercially usable, with freedom to create and distribute derivatives. Rights end if built-in guardrails are bypassed without a suitable replacement.",
+   "obligations": [
+    "Keep guardrails, or replace them with substantially similar ones"
+   ]
+  },
+  "bigcode-openrail": {
+   "name": "BigCode OpenRAIL-M",
+   "commercial": "allowed",
+   "summary": "Commercial use permitted, subject to the use restrictions in Attachment A.",
+   "obligations": [
+    "Pass the use restrictions on to downstream users"
+   ],
+   "restrictions": [
+    "Use restrictions in Attachment A apply"
+   ]
+  },
+  "stability-community": {
+   "name": "Stability AI Community License",
+   "commercial": "conditional",
+   "summary": "Free commercial use only for organizations under US$1M annual revenue.",
+   "revenueLimit": {
+    "amount": 1000000,
+    "currency": "USD",
+    "scope": "organization"
+   },
+   "obligations": [
+    "Display \"Powered by Stability AI\"",
+    "Provide a copy of the agreement"
+   ]
+  },
+  "nvidia-internal": {
+   "name": "NVIDIA Internal Scientific Research and Development License",
+   "commercial": "prohibited",
+   "summary": "Internal research only. It may not be used in production or to generate works for sale or distribution.",
+   "obligations": []
+  },
+  "cc-by-sa-4.0": {
+   "name": "Creative Commons Attribution-ShareAlike 4.0",
+   "commercial": "allowed",
+   "summary": "Commercial use permitted. Adapted material must be shared under the same licence.",
+   "obligations": [
+    "Give attribution",
+    "Share adaptations under the same licence"
+   ]
+  },
+  "nvidia-nc": {
+   "name": "NVIDIA Non-Commercial License",
+   "commercial": "prohibited",
+   "summary": "Non-commercial research activities and publications only.",
+   "obligations": []
+  },
+  "jamba-open": {
+   "name": "Jamba Open Model License",
+   "commercial": "conditional",
+   "summary": "Commercial use is not licensed for organizations above US$50M annual revenue.",
+   "revenueLimit": {
+    "amount": 50000000,
+    "currency": "USD",
+    "scope": "organization"
+   },
+   "obligations": [
+    "Keep the attribution notice"
+   ]
+  },
+  "internlm-weights": {
+   "name": "InternLM model weights terms",
+   "commercial": "conditional",
+   "summary": "Open for academic research. Free commercial use requires an application to the publisher.",
+   "obligations": [
+    "Apply for a commercial licence through the publisher's form"
+   ]
+  }
+ }
+}

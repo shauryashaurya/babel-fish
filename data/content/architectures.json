@@ -1,0 +1,366 @@
+{
+  "families": [
+    {
+      "id": "dense",
+      "name": "Dense",
+      "summary": "Every parameter is used for every token.",
+      "how": "Each layer has one attention block and one feed-forward block. A token passes through all of them.",
+      "why": "It is the simplest design to serve and has the widest runtime support.",
+      "watch": "Compute cost rises directly with model size, because nothing is skipped.",
+      "params": "dense",
+      "mixing": "attention"
+    },
+    {
+      "id": "sparse-moe",
+      "name": "Sparse MoE",
+      "summary": "A very large model where only a small share of the parameters runs for each token.",
+      "how": "The feed-forward block is split into many experts. A small router picks a few experts for each token.",
+      "why": "It adds capacity without a matching rise in compute per token.",
+      "watch": "Plan memory for total parameters and compute for active parameters. All experts must stay loaded even though few run.",
+      "params": "sparse",
+      "mixing": "attention"
+    },
+    {
+      "id": "sparse-hybrid",
+      "name": "Sparse hybrid",
+      "summary": "Mixes cheaper non-standard layers with some full attention, and runs only part of the model per token.",
+      "how": "Most layers use linear attention or convolution. A smaller number of attention layers keep exact long-range lookups.",
+      "why": "It lowers the memory and compute cost of very long contexts.",
+      "watch": "These layer types need specific runtime support. Confirm that your serving stack implements them before committing.",
+      "params": "sparse",
+      "mixing": "hybrid"
+    },
+    {
+      "id": "dense-hybrid",
+      "name": "Dense hybrid",
+      "summary": "Mixes different layer types, with every parameter active for every token.",
+      "how": "Attention layers alternate with linear attention, convolution or state-space layers. There is no expert routing.",
+      "why": "It reduces context cost while keeping compute predictable, which suits smaller models.",
+      "watch": "Runtime support varies by layer type, so test on your target hardware.",
+      "params": "dense",
+      "mixing": "hybrid"
+    },
+    {
+      "id": "hybrid-moe",
+      "name": "Hybrid MoE",
+      "summary": "State-space layers carry most of the sequence, with a few attention layers and routed experts.",
+      "how": "Mamba layers interleave with mixture-of-experts layers. A small number of attention layers handle exact lookups.",
+      "why": "State-space layers keep a fixed-size memory, so long contexts cost far less cache.",
+      "watch": "Sessions hold recurrent state, so confirm that state is reset and isolated between users.",
+      "params": "sparse",
+      "mixing": "hybrid"
+    },
+    {
+      "id": "sparse-omnimodal-moe",
+      "name": "Sparse omnimodal MoE",
+      "summary": "A sparse expert-routed model in the MiMo line, built to work with more than text.",
+      "how": "It uses a sparse MoE backbone with sliding-window and global attention. The MiMo-V2.5 design adds native image, video and audio encoders.",
+      "why": "One model can serve several input types rather than one model per type.",
+      "watch": "Check that the exact checkpoint exposes the input types you need, because official task labels can differ.",
+      "params": "sparse",
+      "mixing": "attention"
+    },
+    {
+      "id": "sparse-moe-causal-encoder-decoder",
+      "name": "Sparse MoE (causal encoder-decoder)",
+      "summary": "A sparse model whose layers are split into an encoder half and a decoder half.",
+      "how": "The encoder processes the sequence. The decoder's global attention reads its keys and values from the final encoder states.",
+      "why": "Reusing one set of encoder states reduces the attention cache held across decoder layers.",
+      "watch": "This is a rare design, so confirm support in your serving runtime.",
+      "params": "sparse",
+      "mixing": "attention"
+    },
+    {
+      "id": "recurrent",
+      "name": "Recurrent",
+      "summary": "No self-attention. Each layer carries a memory state forward from token to token.",
+      "how": "Each token updates a fixed-size matrix memory rather than looking back over earlier tokens.",
+      "why": "Memory does not grow with context length, which suits long streams.",
+      "watch": "Exact recall of earlier text depends on what the state retained, so test long-context tasks directly.",
+      "params": "dense",
+      "mixing": "recurrent"
+    }
+  ],
+  "mechanisms": [
+    {
+      "id": "linear",
+      "name": "Linear attention",
+      "summary": "Keeps a compact running summary rather than storing every earlier token.",
+      "how": "Each token updates a fixed-size state. Gated DeltaNet, Kimi Delta Attention and Lightning Attention are variants.",
+      "helps": "Cache stays flat as context grows.",
+      "watch": "Recall is approximate, which is why these models keep some full attention layers.",
+      "footprint": "Greatly reduces attention cache at long context.",
+      "demo": "state",
+      "match": "delta|\\bKDA\\b|Lightning Attention",
+      "source": {
+        "title": "Kimi Linear: An Expressive, Efficient Attention Architecture",
+        "url": "https://arxiv.org/abs/2510.26692"
+      },
+      "group": "beyond"
+    },
+    {
+      "id": "statespace",
+      "name": "State-space layers (Mamba)",
+      "summary": "Processes a sequence through a fixed-size state rather than pairwise token lookups.",
+      "how": "Each token updates the state, and the output is read from that state.",
+      "helps": "Long contexts cost little extra memory.",
+      "watch": "Per-session state must be isolated and reset correctly.",
+      "footprint": "Fixed state per session instead of a growing cache.",
+      "demo": "state",
+      "match": "Mamba",
+      "source": {
+        "title": "Transformers are SSMs",
+        "url": "https://arxiv.org/abs/2405.21060"
+      },
+      "group": "beyond"
+    },
+    {
+      "id": "recurrent",
+      "name": "Recurrent memory (xLSTM)",
+      "summary": "An LSTM-style layer with a matrix memory in place of attention.",
+      "how": "Gates decide what to write to and read from memory at each token.",
+      "helps": "Memory stays constant regardless of sequence length.",
+      "watch": "Far fewer production runtimes support it.",
+      "footprint": "No attention cache, only recurrent state.",
+      "demo": "state",
+      "match": "LSTM",
+      "source": {
+        "title": "xLSTM: Extended Long Short-Term Memory",
+        "url": "https://arxiv.org/abs/2405.04517"
+      },
+      "group": "beyond"
+    },
+    {
+      "id": "convolution",
+      "name": "Convolution blocks",
+      "summary": "Mixes each token with its immediate neighbours using a short filter.",
+      "how": "A small kernel slides over the sequence. LIV and ShortConv blocks are the variants used here.",
+      "helps": "Very cheap, and useful for small models.",
+      "watch": "Sees only nearby tokens, so it relies on attention layers for long-range context.",
+      "footprint": "Needs almost no cache.",
+      "demo": "scope-conv",
+      "match": "\\bLIV\\b|ShortConv",
+      "source": {
+        "title": "Liquid AI: LFM3",
+        "url": "https://huggingface.co/blog/LiquidAI/lfm3"
+      },
+      "group": "beyond"
+    },
+    {
+      "id": "mtp",
+      "name": "Multi-token prediction",
+      "summary": "An extra output path that predicts tokens beyond the next one.",
+      "how": "Additional prediction modules look further ahead from the same hidden state.",
+      "helps": "Can improve training and speed up inference through speculative decoding.",
+      "watch": "Speed gains depend on runtime support for this path.",
+      "footprint": "Adds a small amount of weight memory.",
+      "demo": "mtp",
+      "match": "\\bMTP\\b",
+      "source": {
+        "title": "DeepSeek-V3 Technical Report",
+        "url": "https://arxiv.org/abs/2412.19437"
+      },
+      "group": "ffn"
+    },
+    {
+      "id": "moe",
+      "name": "Mixture of experts",
+      "summary": "Replaces one large feed-forward block with many experts, of which only a few run per token.",
+      "how": "A router scores the experts for each token and activates the top few.",
+      "helps": "Adds capacity while keeping compute per token low.",
+      "watch": "All experts must remain in memory, and traffic across GPUs can become the bottleneck.",
+      "footprint": "Memory follows total parameters. Compute follows active parameters.",
+      "demo": "experts",
+      "match": "MoE",
+      "matchClass": "MoE|^Sparse",
+      "source": {
+        "title": "Switch Transformers",
+        "url": "https://arxiv.org/abs/2101.03961"
+      },
+      "group": "ffn"
+    },
+    {
+      "id": "window",
+      "name": "Sliding-window and global attention",
+      "summary": "Most layers look only at recent tokens, and periodic global layers see everything.",
+      "how": "Local layers keep a fixed window. Every few layers, a global layer attends to the whole context.",
+      "helps": "Cuts cache and compute at long context.",
+      "watch": "Facts outside the window reach local layers only through global layers.",
+      "footprint": "Local layers cache only their window.",
+      "demo": "scope-window",
+      "match": "sliding|\\bSWA\\b|local layers|chunked",
+      "segmentMatch": "sliding|\\bSWA\\b|global|\\bfull\\b",
+      "source": {
+        "title": "Longformer: The Long-Document Transformer",
+        "url": "https://arxiv.org/abs/2004.05150"
+      },
+      "group": "attention"
+    },
+    {
+      "id": "sparse",
+      "name": "Sparse attention",
+      "summary": "Attends only to a selected subset of earlier tokens.",
+      "how": "A lightweight scorer picks the most relevant tokens, and full attention runs only on those.",
+      "helps": "Keeps long-context compute manageable.",
+      "watch": "Results depend on the selector finding the right tokens.",
+      "footprint": "Reduces attention compute. Cache savings depend on the design.",
+      "demo": "scope-sparse",
+      "match": "sparse attention|sparse-index|\\bDSA\\b|\\bLSA\\b|\\bQSA\\b|window/sparse",
+      "source": {
+        "title": "DeepSeek-V3.2",
+        "url": "https://arxiv.org/abs/2512.02556"
+      },
+      "group": "attention"
+    },
+    {
+      "id": "gated",
+      "name": "Gated attention",
+      "summary": "Each attention head has a learned gate that scales its output.",
+      "how": "A gate between 0 and 1 controls how much of the attention result is passed on.",
+      "helps": "Lets the model suppress unhelpful attention and reduces attention sinks.",
+      "watch": "Adds a small amount of compute to each attention layer.",
+      "footprint": "Little change to memory.",
+      "demo": "gate",
+      "match": "gated[- ](attention|GQA|MLA|HCA|DSA)|gated output",
+      "source": {
+        "title": "Gated Attention for Large Language Models",
+        "url": "https://arxiv.org/abs/2505.06708"
+      },
+      "group": "attention"
+    },
+    {
+      "id": "mla",
+      "name": "Multi-head latent attention",
+      "summary": "Compresses keys and values into one small shared representation.",
+      "how": "The cache stores a compact latent vector, which is expanded when attention runs.",
+      "helps": "Greatly reduces the attention cache per token.",
+      "watch": "Needs dedicated kernels to run efficiently, so check runtime support.",
+      "footprint": "Very small cache per token.",
+      "demo": "heads-mla",
+      "match": "\\bMLA\\b",
+      "source": {
+        "title": "DeepSeek-V2",
+        "url": "https://arxiv.org/abs/2405.04434"
+      },
+      "group": "attention"
+    },
+    {
+      "id": "gqa",
+      "name": "Grouped-query attention",
+      "summary": "Many query heads share a smaller number of key and value heads.",
+      "how": "Query heads are divided into groups, and each group reads from one shared key-value head.",
+      "helps": "Cuts the cache with little quality loss. It is the most common attention type in this catalog.",
+      "watch": "The cache still grows with every token in context.",
+      "footprint": "Cache shrinks in proportion to the query-to-KV head ratio.",
+      "demo": "heads-gqa",
+      "match": "\\bGQA\\b|multi-query",
+      "source": {
+        "title": "GQA: Training Generalized Multi-Query Transformer Models",
+        "url": "https://arxiv.org/abs/2305.13245"
+      },
+      "group": "attention"
+    },
+    {
+      "id": "mha",
+      "name": "Multi-head attention",
+      "summary": "The original transformer attention, where every head stores its own keys and values.",
+      "how": "Each head compares the current token with all earlier tokens.",
+      "helps": "Exact and widely supported.",
+      "watch": "Has the largest cache per token of the attention types here.",
+      "footprint": "Largest attention cache.",
+      "demo": "heads-mha",
+      "match": "\\bMHA\\b",
+      "source": {
+        "title": "Attention Is All You Need",
+        "url": "https://arxiv.org/abs/1706.03762"
+      },
+      "group": "attention"
+    },
+    {
+      "id": "qknorm",
+      "name": "Query-key normalization",
+      "summary": "Normalizes queries and keys before they are compared.",
+      "how": "Vectors are scaled to a consistent length, so attention scores stay in a stable range.",
+      "helps": "Improves numerical stability during training.",
+      "watch": "It is a detail of the attention block and rarely affects a selection decision.",
+      "footprint": "No meaningful change.",
+      "demo": "norm",
+      "match": "QK-Norm|Q/K",
+      "source": {
+        "title": "Scaling Vision Transformers to 22 Billion Parameters",
+        "url": "https://arxiv.org/abs/2302.05442"
+      },
+      "group": "attention"
+    },
+    {
+      "id": "position",
+      "name": "Position encoding",
+      "summary": "Tells the model where each token sits. RoPE, NoPE and learned bias are the variants here.",
+      "how": "RoPE rotates queries and keys by an angle based on position, so the angle between two tokens reflects their distance.",
+      "helps": "RoPE needs no stored position table and handles varying lengths.",
+      "watch": "NoPE layers rely on causal masking alone for order information.",
+      "footprint": "No meaningful change.",
+      "demo": "position",
+      "match": "RoPE|NoPE|absolute positional|relative-position",
+      "source": {
+        "title": "RoFormer: Rotary Position Embedding",
+        "url": "https://arxiv.org/abs/2104.09864"
+      },
+      "group": "position"
+    }
+  ],
+  "familyAxes": {
+    "question": "Two design choices place every family: how many of its parameters work on each token, and how each token draws on the tokens before it.",
+    "params": [
+      {
+        "id": "dense",
+        "name": "Dense",
+        "text": "Every parameter works on every token."
+      },
+      {
+        "id": "sparse",
+        "name": "Sparse (mixture of experts)",
+        "text": "A router sends each token to a few experts; most parameters sit idle for any one token."
+      }
+    ],
+    "mixing": [
+      {
+        "id": "attention",
+        "name": "Attention in every layer",
+        "text": "Each layer can look back at earlier tokens directly."
+      },
+      {
+        "id": "hybrid",
+        "name": "Hybrid",
+        "text": "Some layers replace attention with a fixed-size state (linear attention, state-space or convolution)."
+      },
+      {
+        "id": "recurrent",
+        "name": "No attention",
+        "text": "Every layer carries a fixed-size memory forward instead."
+      }
+    ]
+  },
+  "mechanismGroups": [
+    {
+      "id": "attention",
+      "name": "Attention variants",
+      "text": "How each layer looks back over earlier tokens, and how much it must remember to do so."
+    },
+    {
+      "id": "position",
+      "name": "Position",
+      "text": "How the model knows the order of tokens."
+    },
+    {
+      "id": "beyond",
+      "name": "Beyond attention",
+      "text": "Layers that carry a fixed-size state instead of a growing cache."
+    },
+    {
+      "id": "ffn",
+      "name": "Feed-forward and prediction",
+      "text": "Where most parameters live, and how the next token is produced."
+    }
+  ]
+}

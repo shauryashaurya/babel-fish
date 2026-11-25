@@ -1,0 +1,34 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+const require = createRequire(import.meta.url);
+const ts = require('typescript');
+const cache = new Map();
+function load(file) {
+  const absolute = path.resolve(file);
+  if (cache.has(absolute)) return cache.get(absolute).exports;
+  const code = ts.transpileModule(fs.readFileSync(absolute, 'utf8'), {compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS}}).outputText;
+  const mod = {exports: {}};
+  cache.set(absolute, mod);
+  new Function('require', 'module', 'exports', code)(name => name.startsWith('.') ? load(path.resolve(path.dirname(absolute), `${name}.ts`)) : require(name), mod, mod.exports);
+  return mod.exports;
+}
+const {parseCSV, toCSV} = load('src/lib/csv.ts');
+load('src/lib/content.ts').setCopy(JSON.parse(fs.readFileSync('data/content/copy.json', 'utf8')));
+const {buildRecord} = load('src/lib/report.ts');
+const {createXlsx, createPdf} = load('src/lib/exports.ts');
+const {rules} = JSON.parse(fs.readFileSync('data/catalog/license_rules.json', 'utf8'));
+const models = JSON.parse(fs.readFileSync('data/catalog/models.json', 'utf8')).models.map(m => ({...m, license: {...m.license, rule: rules[m.license.key]}}));
+const trip = parseCSV(toCSV([{name: 'a, b', detail: 'line 1\nline 2', note: '"hello"'}]));
+if (trip[0].name !== 'a, b' || trip[0].detail !== 'line 1\nline 2' || trip[0].note !== '"hello"') throw Error('CSV round trip failed');
+const id = models.find(m => m.license.key === 'apache-2.0' && m.weightGiB && m.kvKiBPerToken).id;
+const record = buildRecord({useCase: 'Export test', preparedBy: 'Test', commercialUse: true, offersMaaS: false, annualRevenueUsd: 1e8, monthlyActiveUsers: 1000, regions: ['EU'], minContext: 1000, needsVision: false, excludedPublishers: [], excludedCountries: [], gpuMemoryGiB: 96, gpuCount: 64, concurrentSessions: 1, headroomPct: 20, testCases: 100, minPassRatePct: 80, maxCriticalFailures: 0, maxP95Ms: null, monthlyBudget: null, requestsPerMonth: 1000, inputTokens: 1000, outputTokens: 200, peakRps: 2, gpuMonthlyCost: 1000, candidates: [id], results: {[id]: {hosting: 'self', passed: 95, criticalFailures: 0, p95Ms: 500, rpsPerReplica: 1, inputPrice: null, outputPrice: null, otherMonthly: 0}}, notes: ''}, models);
+const pdf = Buffer.from(createPdf(record)).toString('latin1');
+if (!pdf.startsWith('%PDF-') || !pdf.includes('SHAURYA AGARWAL')) throw Error('PDF output invalid');
+const xlsx = Buffer.from(createXlsx(record));
+if (xlsx[0] !== 0x50 || xlsx[1] !== 0x4b) throw Error('XLSX output invalid');
+for (const text of ['Selected: ', 'Licence: ', 'GPUs: ', 'Official checkpoint: ', 'SHAURYA AGARWAL']) if (!record.markdown.includes(text)) throw Error(`Record is missing ${text}`);
+fs.mkdirSync('_qa', {recursive: true});
+fs.writeFileSync('_qa/example.pdf', createPdf(record));
+fs.writeFileSync('_qa/example.xlsx', createXlsx(record));
+console.log({exports: 'passed', sections: record.sections.length, sheets: record.sheets.length});

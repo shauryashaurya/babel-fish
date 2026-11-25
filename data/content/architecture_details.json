@@ -1,0 +1,373 @@
+{
+  "feedForward": {
+    "scene": "dense",
+    "controls": [
+      {"id": "tokens", "min": 8, "max": 32, "step": 1, "value": 16},
+      {"id": "position", "min": 1, "max": 31, "step": 1, "value": 10},
+      {"id": "expansion", "min": 1, "max": 6, "step": 1, "value": 3}
+    ]
+  },
+  "families": {
+    "dense": {
+      "defaultBlock": "gqa",
+      "math": [
+        {"label": "Layer update", "tex": "y = x + A(\\mathrm{LN}(x)), \\qquad x' = y + F(\\mathrm{LN}(y))", "note": "A is attention, F is the feed-forward block and LN is layer normalization. Residual connections keep gradients flowing through deep stacks."},
+        {"label": "Compute per token", "tex": "\\mathrm{FLOPs}_{\\text{token}} \\propto P_{\\text{total}}", "note": "Every parameter takes part in every forward pass."},
+        {"label": "Serving memory", "tex": "M = P\\,b_w + S\\,T\\,L\\,(2\\,g\\,d_h\\,b_c)", "note": "P parameters at b_w bytes, S sessions, T tokens, L layers, g key-value heads of dimension d_h, b_c bytes per cache element."}
+      ],
+      "strengths": ["Throughput is predictable because there is no routing variance between tokens.", "All mainstream runtimes, quantizers and GPU kernels support it.", "Tensor-parallel splitting across GPUs is straightforward because all weights are used uniformly."],
+      "weaknesses": ["Compute scales linearly with parameters, so large dense models are slow per token.", "Attention cache grows linearly with context and layers.", "Capacity cannot be added without paying for it on every token."],
+      "limitations": ["Above roughly the capacity of one GPU, memory bandwidth rather than memory size tends to limit token rate.", "Full attention has quadratic total cost in sequence length over a generated sequence."],
+      "caveats": ["Parameter count alone does not predict quality across model generations.", "Context length in a config is a limit, not a measure of retrieval accuracy at that length."]
+    },
+    "sparse-moe": {
+      "defaultBlock": "gqa",
+      "math": [
+        {"label": "Routed feed-forward", "tex": "F(x) = \\sum_{e \\in \\mathrm{top}_k(r(x))} w_e(x)\\, f_e(x)", "note": "The router r scores E experts and only k of them run."},
+        {"label": "Active fraction", "tex": "\\rho = \\frac{P_{\\text{base}} + L\\,k\\,P_e}{P_{\\text{base}} + L\\,E\\,P_e}", "note": "P_e is the size of one expert. The fraction approaches k/E as experts dominate the parameter count."},
+        {"label": "Memory versus compute", "tex": "M \\propto P_{\\text{total}}, \\qquad \\mathrm{FLOPs}_{\\text{token}} \\propto \\rho\\,P_{\\text{total}}", "note": "This gap is the defining trade-off of the family."}
+      ],
+      "strengths": ["Far more capacity per unit of compute than a dense model of equal token cost.", "Expert specialization can raise quality without matching growth in per-token FLOPs.", "Well suited to batched serving, where many tokens exercise many experts at once."],
+      "weaknesses": ["All experts must reside in fast memory, so GPU memory is usually the first constraint.", "Router load imbalance creates hot experts and uneven GPU utilization.", "Small batches waste memory bandwidth because expert weights are fetched for few tokens."],
+      "limitations": ["Models above a single server need expert parallelism with all-to-all token exchange at every MoE layer.", "Interconnect bandwidth and latency can dominate step time at scale."],
+      "caveats": ["Advertised active parameters describe compute, not the memory you must provision.", "Quantized MoE checkpoints may need specific GPU generations to stay at their published size."]
+    },
+    "sparse-hybrid": {
+      "defaultBlock": "linear",
+      "math": [
+        {"label": "Mixed cache", "tex": "C(T) = L_A\\,c_A\\,T + L_S\\,c_S", "note": "L_A attention layers grow with context T. L_S state layers hold a fixed c_S."},
+        {"label": "Cache saving", "tex": "\\frac{C_{\\text{hybrid}}}{C_{\\text{attn}}} \\to \\frac{L_A}{L_A + L_S} \\quad (T \\to \\infty)", "note": "At long context the saving is set by the share of attention layers."},
+        {"label": "Active compute", "tex": "\\mathrm{FLOPs}_{\\text{token}} \\propto \\rho\\,P_{\\text{total}}", "note": "Expert routing still applies, so the sparse MoE memory-compute gap is inherited."}
+      ],
+      "strengths": ["Cache grows far more slowly with context than in all-attention designs.", "Combines cheap state layers with exact lookups in periodic attention layers.", "Makes million-token contexts feasible on far less memory."],
+      "weaknesses": ["Linear layers compress history, so exact long-range retrieval depends on the remaining attention layers.", "Mixed layer types complicate kernels, batching and speculative decoding.", "State must be checkpointed and restored for prefix caching."],
+      "limitations": ["Prefix caching needs per-layer state snapshots rather than simple cache truncation.", "Runtime and quantization support lags behind standard attention."],
+      "caveats": ["The published attention-to-linear ratio is a design choice, and retrieval quality should be tested at your real context length.", "Benchmarks at short context do not show how the compressed state behaves at long context."]
+    },
+    "dense-hybrid": {
+      "defaultBlock": "linear",
+      "math": [
+        {"label": "Mixed cache", "tex": "C(T) = L_A\\,c_A\\,T + L_S\\,c_S", "note": "Only attention layers grow with context."},
+        {"label": "Compute", "tex": "\\mathrm{FLOPs}_{\\text{token}} \\propto P_{\\text{total}}", "note": "There is no routing, so every parameter stays active."},
+        {"label": "Convolution reach", "tex": "R = 1 + L_C\\,(k - 1)", "note": "For convolution variants, the receptive field grows only linearly with convolution layers."}
+      ],
+      "strengths": ["Predictable latency with no router variance.", "Low cache makes these models a good fit for small GPUs and edge devices.", "Simple memory planning because active and total parameters are equal."],
+      "weaknesses": ["Compute remains proportional to total size.", "Local or compressed layers have weaker exact recall than attention.", "Fewer optimized kernels exist than for plain attention."],
+      "limitations": ["Long-range dependencies must pass through the small number of attention layers.", "Hardware acceleration for state or convolution paths varies by runtime."],
+      "caveats": ["Small hybrid models can look strong on short benchmarks and degrade on long-document tasks.", "Check tool and structured-output support, which depends on the runtime rather than the layer design."]
+    },
+    "hybrid-moe": {
+      "defaultBlock": "statespace",
+      "math": [
+        {"label": "State layer", "tex": "h_t = A_t h_{t-1} + B_t x_t, \\qquad y_t = C_t^{\\top} h_t", "note": "Mamba layers keep a fixed-size state per session."},
+        {"label": "Session memory", "tex": "M_S = L_{SS}\\,c_S + L_A\\,c_A\\,T", "note": "Only the few attention layers grow with context."},
+        {"label": "Routed compute", "tex": "\\rho = \\frac{P_{\\text{base}} + L_E\\,k\\,P_e}{P_{\\text{total}}}", "note": "Expert layers keep per-token compute low."}
+      ],
+      "strengths": ["Very low cache per token at long context.", "Combines low per-token compute from routing with low session memory from state layers.", "Efficient for long streaming sessions."],
+      "weaknesses": ["Long-range recall relies heavily on a few attention layers.", "State-space kernels are less mature than attention kernels on many runtimes.", "Batching sessions at different positions requires per-session state handling."],
+      "limitations": ["Weights still occupy memory in proportion to total parameters.", "Parallelizing the recurrence during training depends on the structured form of the state update."],
+      "caveats": ["Session state is sensitive data and must be isolated, reset and never shared between tenants.", "Prefix caching behaves differently from attention models because state cannot be truncated."]
+    },
+    "sparse-omnimodal-moe": {
+      "defaultBlock": "window",
+      "math": [
+        {"label": "Modal encoding", "tex": "z_m = E_m(x_m), \\quad m \\in \\{\\text{text, image, video, audio}\\}", "note": "Each input type has its own encoder into a shared token space."},
+        {"label": "Shared decoding", "tex": "y = D\\big(z_{m_1} \\,\\|\\, \\cdots \\,\\|\\, z_{m_n}\\big)", "note": "The sparse backbone processes the combined token sequence."},
+        {"label": "Context load", "tex": "T = T_{\\text{text}} + \\sum_m n_m\\,\\tau_m", "note": "Each image, frame or audio chunk adds tau_m tokens, so media can consume context quickly."}
+      ],
+      "strengths": ["One deployment can serve several input types.", "Shared backbone reuses capacity across modalities.", "Sliding-window layers contain the cache cost of long media sequences."],
+      "weaknesses": ["Encoders add memory and preprocessing latency.", "Media tokens consume context budget quickly.", "Evaluation must cover each modality separately."],
+      "limitations": ["Local windows can miss relationships between distant frames unless global layers carry them.", "GPU decoding and preprocessing can become the bottleneck before inference does."],
+      "caveats": ["Not every checkpoint in this family exposes every modality, so check the exact repository.", "Media inputs may carry privacy and retention obligations that text inputs do not."]
+    },
+    "sparse-moe-causal-encoder-decoder": {
+      "defaultBlock": "window",
+      "math": [
+        {"label": "Causal encoding", "tex": "e_t = E(x_{1:t})", "note": "The encoder only sees tokens up to the current one, which keeps generation causal."},
+        {"label": "Decoder lookup", "tex": "y_t = D\\big(x_t,\\; K(e_{1:t}),\\; V(e_{1:t})\\big)", "note": "Decoder global attention reads keys and values derived from the final encoder states."},
+        {"label": "Shared global cache", "tex": "C_{\\text{global}} = c\\,T \\quad \\text{rather than} \\quad L_D\\,c\\,T", "note": "One set of encoder states replaces a separate global cache in each decoder layer."}
+      ],
+      "strengths": ["Large reduction in global attention cache across decoder layers.", "Keeps causal generation while reusing encoder work.", "Inherits MoE compute efficiency."],
+      "weaknesses": ["A rare topology with limited runtime support.", "Encoder state becomes a shared dependency for all decoder layers.", "Harder to apply standard pruning and layer-splitting strategies."],
+      "limitations": ["Stage boundaries constrain how the model can be split across devices.", "Only one catalog model currently uses this design, so operational evidence is thin."],
+      "caveats": ["Check that your serving stack implements the exact cache layout before planning capacity.", "Published parameter counts may separate backbone and auxiliary tables, which changes memory estimates."]
+    },
+    "recurrent": {
+      "defaultBlock": "recurrent",
+      "math": [
+        {"label": "Recurrence", "tex": "s_t = F(s_{t-1}, x_t), \\qquad y_t = G(s_t)", "note": "All history must pass through the fixed-size state."},
+        {"label": "Memory", "tex": "M(T) = P\\,b_w + S\\,L\\,c_s = \\mathcal{O}(1) \\text{ in } T", "note": "Session memory does not grow with context length."},
+        {"label": "Information bound", "tex": "I(x_{1:t};\\, s_t) \\le H(s_t)", "note": "A fixed-size state can only retain a bounded amount of information about the past."}
+      ],
+      "strengths": ["Constant memory per session regardless of stream length.", "Constant per-token compute, with no lookup over history.", "Natural fit for streaming and on-device inference."],
+      "weaknesses": ["Exact copying and retrieval from far back are structurally difficult.", "Training is harder to parallelize over sequence length than attention.", "Few production-grade optimized kernels."],
+      "limitations": ["There is no explicit context window to reason about, so capacity must be established empirically.", "Standard prefix caching and speculative decoding need state snapshots."],
+      "caveats": ["Stateful serving requires strict session isolation.", "Only one model in this catalog uses this design, so comparative evidence is limited."]
+    }
+  },
+  "mechanisms": {
+    "linear": {
+      "scene": "state",
+      "controls": [
+        {"id": "tokens", "min": 8, "max": 32, "step": 1, "value": 20},
+        {"id": "position", "min": 1, "max": 31, "step": 1, "value": 12},
+        {"id": "stateDim", "min": 3, "max": 32, "step": 1, "value": 8},
+        {"id": "memory", "min": 10, "max": 99, "step": 1, "value": 80}
+      ],
+      "math": [
+        {"label": "Delta rule update", "tex": "S_t = \\alpha_t\\,(I - \\beta_t k_t k_t^{\\top})\\,S_{t-1} + \\beta_t v_t k_t^{\\top}", "note": "S is a key-to-value matrix, alpha_t a decay gate and beta_t a write strength. Gated DeltaNet uses this form."},
+        {"label": "Readout", "tex": "o_t = S_t\\,q_t", "note": "A lookup is one matrix-vector product, regardless of how many tokens came before."},
+        {"label": "Cost", "tex": "\\text{time per token} = \\mathcal{O}(d^2), \\quad \\text{memory} = \\mathcal{O}(d^2)", "note": "Neither depends on the sequence length."}
+      ],
+      "strengths": ["Cache is constant in sequence length.", "The delta rule corrects stored associations rather than only accumulating them.", "Chunkwise forms parallelize well on GPUs."],
+      "weaknesses": ["The state has limited rank, so distinct items can interfere.", "Exact copy behaviour is weaker than in full attention.", "Per-token matrix updates can cost more than attention at short context."],
+      "limitations": ["State capacity is bounded by head dimension and head count.", "Needs chunkwise kernels to reach competitive training speed."],
+      "caveats": ["Advantages appear mainly at long context, so measure at your real length.", "Variants differ in gating and normalization, so kernels are rarely interchangeable."]
+    },
+    "statespace": {
+      "scene": "state",
+      "controls": [
+        {"id": "tokens", "min": 8, "max": 32, "step": 1, "value": 20},
+        {"id": "position", "min": 1, "max": 31, "step": 1, "value": 12},
+        {"id": "stateDim", "min": 3, "max": 32, "step": 1, "value": 10},
+        {"id": "memory", "min": 10, "max": 99, "step": 1, "value": 85}
+      ],
+      "math": [
+        {"label": "State space model", "tex": "h_t = A_t h_{t-1} + B_t x_t, \\qquad y_t = C_t^{\\top} h_t", "note": "A controls memory decay, B writes the input and C reads the output."},
+        {"label": "Attention duality", "tex": "y_i = \\sum_{j \\le i} C_i^{\\top}\\Big(\\prod_{k=j+1}^{i} A_k\\Big) B_j\\, x_j", "note": "Mamba-2 expresses this as a structured attention matrix, which enables chunked parallel computation."},
+        {"label": "Influence decay", "tex": "\\|\\partial y_i / \\partial x_j\\| \\lesssim \\lambda^{\\,i-j}", "note": "With stable dynamics (lambda below 1), older tokens lose influence exponentially."}
+      ],
+      "strengths": ["Fixed state size per session.", "Linear total cost in sequence length.", "Chunked forms use efficient GPU matrix operations."],
+      "weaknesses": ["Influence from distant tokens decays.", "Weak at arbitrary-position lookup without attention layers.", "Less mature tooling than attention."],
+      "limitations": ["State dimension caps what can be remembered.", "Batching requires per-session state tracking."],
+      "caveats": ["State contains information derived from user data and must be isolated.", "A published layer count does not reveal the effective memory horizon, which should be tested."]
+    },
+    "recurrent": {
+      "scene": "state",
+      "controls": [
+        {"id": "tokens", "min": 8, "max": 32, "step": 1, "value": 20},
+        {"id": "position", "min": 1, "max": 31, "step": 1, "value": 12},
+        {"id": "stateDim", "min": 3, "max": 32, "step": 1, "value": 8},
+        {"id": "memory", "min": 10, "max": 99, "step": 1, "value": 90}
+      ],
+      "math": [
+        {"label": "Matrix memory", "tex": "C_t = f_t\\,C_{t-1} + i_t\\,v_t k_t^{\\top}", "note": "The forget gate f and input gate i control what stays in the matrix memory."},
+        {"label": "Output", "tex": "h_t = o_t \\odot \\tanh(C_t\\,q_t)", "note": "The output gate o filters the associative lookup."},
+        {"label": "Gates", "tex": "f_t, i_t, o_t = \\sigma(W\\,x_t)", "note": "Gates are learned functions of the current input."}
+      ],
+      "strengths": ["Constant memory and compute per token.", "Exponential gating gives finer control of memory than classic LSTM.", "Parallelizable matrix-memory form."],
+      "weaknesses": ["Far smaller ecosystem than transformer models.", "Bounded memory limits exact recall.", "Harder to reuse attention-oriented kernels and caches."],
+      "limitations": ["Few runtimes provide optimized inference.", "Speculative decoding needs recurrent state rollback."],
+      "caveats": ["Statefulness complicates load balancing, because sessions are tied to their state.", "Evidence at frontier scale is limited."]
+    },
+    "convolution": {
+      "scene": "conv",
+      "controls": [
+        {"id": "tokens", "min": 8, "max": 32, "step": 1, "value": 20},
+        {"id": "position", "min": 1, "max": 31, "step": 1, "value": 12},
+        {"id": "kernel", "min": 2, "max": 9, "step": 1, "value": 4},
+        {"id": "layers", "min": 1, "max": 24, "step": 1, "value": 6}
+      ],
+      "math": [
+        {"label": "Causal convolution", "tex": "y_t = \\sum_{j=0}^{k-1} w_j\\, x_{t-j}", "note": "A kernel of k weights mixes each token with its k-1 predecessors."},
+        {"label": "Receptive field", "tex": "R = 1 + L\\,(k - 1)", "note": "Reach grows linearly with layers, unlike attention's unbounded lookup."},
+        {"label": "Streaming state", "tex": "c = L\\,(k-1)\\,d\\,b", "note": "Only the last k-1 hidden vectors per layer must be kept."}
+      ],
+      "strengths": ["Very cheap, with tiny streaming state.", "Efficient on CPUs, NPUs and small GPUs.", "Good at local patterns such as syntax and morphology."],
+      "weaknesses": ["No access beyond the receptive field.", "Cannot perform content-based retrieval.", "Fixed weights do not adapt to which earlier token matters."],
+      "limitations": ["Long-range tasks depend entirely on interleaved attention layers.", "Deep stacks are needed for modest reach."],
+      "caveats": ["Layer variants differ, so check runtime support for the exact block.", "Strong short-context scores do not imply long-document capability."]
+    },
+    "mtp": {
+      "scene": "mtp",
+      "controls": [
+        {"id": "tokens", "min": 8, "max": 32, "step": 1, "value": 20},
+        {"id": "position", "min": 1, "max": 26, "step": 1, "value": 10},
+        {"id": "horizon", "min": 1, "max": 8, "step": 1, "value": 3},
+        {"id": "accept", "min": 10, "max": 95, "step": 5, "value": 70}
+      ],
+      "math": [
+        {"label": "Training loss", "tex": "\\mathcal{L} = \\mathcal{L}_{\\text{main}} + \\lambda \\sum_{m=1}^{M} \\mathcal{L}_{t+m}", "note": "Extra heads learn to predict further tokens from the same state."},
+        {"label": "Speculative yield", "tex": "\\mathbb{E}[\\text{tokens per step}] = \\sum_{i=0}^{M} p^{\\,i} = \\frac{1 - p^{M+1}}{1 - p}", "note": "If each further prediction is accepted with probability p, yield saturates quickly."},
+        {"label": "Limit", "tex": "\\lim_{M \\to \\infty} \\mathbb{E} = \\frac{1}{1 - p}", "note": "Acceptance rate matters more than horizon."}
+      ],
+      "strengths": ["Auxiliary targets can regularize training.", "Reuses the backbone for draft predictions.", "Can reduce latency without a separate draft model."],
+      "weaknesses": ["Gains depend strongly on acceptance rate.", "Rejected tokens waste compute.", "Adds weights that are unused when speculation is disabled."],
+      "limitations": ["Requires runtime support for the specific prediction path.", "Stateful layers need rollback when a prediction is rejected."],
+      "caveats": ["Throughput claims with speculation depend on the workload's predictability.", "Some released checkpoints omit MTP modules, so check the repository."]
+    },
+    "moe": {
+      "scene": "experts",
+      "controls": [
+        {"id": "tokens", "min": 8, "max": 32, "step": 1, "value": 16},
+        {"id": "position", "min": 1, "max": 31, "step": 1, "value": 8},
+        {"id": "experts", "min": 8, "max": 896, "step": 8, "value": 64},
+        {"id": "active", "min": 1, "max": 32, "step": 1, "value": 4},
+        {"id": "shared", "min": 0, "max": 4, "step": 1, "value": 1}
+      ],
+      "math": [
+        {"label": "Routing", "tex": "S(x) = \\mathrm{top}_k\\big(r(x)\\big), \\quad r(x) = W_r x", "note": "A linear router scores all experts, then the top k are selected."},
+        {"label": "Output", "tex": "F(x) = \\sum_{s} f_s(x) + \\sum_{e \\in S(x)} \\tilde r_e(x)\\, f_e(x)", "note": "Shared experts always run. Routed experts are weighted by normalized router scores."},
+        {"label": "Load balance", "tex": "\\mathcal{L}_{\\text{bal}} = E \\sum_{e} \\bar{u}_e\\, \\bar{r}_e", "note": "An auxiliary loss, in the style of Switch Transformers, penalizes uneven expert use."}
+      ],
+      "strengths": ["Decouples capacity from per-token compute.", "Scales total parameters with little added FLOPs.", "Benefits strongly from batching."],
+      "weaknesses": ["Every expert occupies GPU memory.", "Discrete routing causes load imbalance and dead experts.", "Token shuffling across GPUs adds communication at every MoE layer."],
+      "limitations": ["Batch size must be large for expert fetches to be efficient.", "Latency has a heavier tail when experts are unevenly loaded."],
+      "caveats": ["Active parameter figures do not include router or shared-layer overhead consistently across publishers.", "Quantization of expert weights can affect rarely used experts differently."]
+    },
+    "window": {
+      "scene": "attention",
+      "controls": [
+        {"id": "tokens", "min": 8, "max": 32, "step": 1, "value": 24},
+        {"id": "position", "min": 1, "max": 31, "step": 1, "value": 18},
+        {"id": "window", "min": 1, "max": 31, "step": 1, "value": 6},
+        {"id": "globalLayer", "min": 0, "max": 1, "step": 1, "value": 0, "toggle": true},
+        {"id": "queryHeads", "min": 2, "max": 128, "step": 2, "value": 8},
+        {"id": "kvHeads", "min": 1, "max": 32, "step": 1, "value": 2}
+      ],
+      "math": [
+        {"label": "Causal window mask", "tex": "M_{tj} = \\mathbb{1}\\,[\\,t - w \\le j < t\\,]", "note": "Local layers can only attend to the last w tokens."},
+        {"label": "Layer cache", "tex": "C(T) = L_{\\ell}\\,c\\,\\min(T, w) + L_g\\,c\\,T", "note": "Local layers cap their cache at the window, and global layers grow with T."},
+        {"label": "Information path", "tex": "\\text{reach} \\approx L_{\\ell}\\,w \\text{ between global layers}", "note": "Stacked local layers propagate information further than a single window."}
+      ],
+      "strengths": ["Large cache savings at long context.", "Lower attention compute on local layers.", "Compatible with standard attention kernels."],
+      "weaknesses": ["Distant facts reach local layers only through global layers.", "Ring-buffer management adds implementation complexity.", "Interaction with attention sinks must be handled, or quality drops when the first token leaves the window."],
+      "limitations": ["Global layers still dominate cache at very long context.", "Prefix caching must restore both ring buffers and full-context buffers."],
+      "caveats": ["A naive memory estimate overstates cache for local layers.", "Window size is often per-layer-type, so read the exact config."]
+    },
+    "sparse": {
+      "scene": "attention",
+      "controls": [
+        {"id": "tokens", "min": 8, "max": 32, "step": 1, "value": 24},
+        {"id": "position", "min": 1, "max": 31, "step": 1, "value": 18},
+        {"id": "topK", "min": 1, "max": 24, "step": 1, "value": 5},
+        {"id": "queryHeads", "min": 2, "max": 128, "step": 2, "value": 8},
+        {"id": "kvHeads", "min": 1, "max": 32, "step": 1, "value": 2}
+      ],
+      "math": [
+        {"label": "Index selection", "tex": "S_t = \\mathrm{top}_k\\big(\\,I(q_t, k_{1:t-1})\\,\\big)", "note": "A cheap indexer I scores earlier tokens."},
+        {"label": "Sparse attention", "tex": "\\alpha_{tj} = \\frac{\\exp(q_t^{\\top} k_j)}{\\sum_{i \\in S_t} \\exp(q_t^{\\top} k_i)}, \\quad j \\in S_t", "note": "Softmax runs only on the selected tokens."},
+        {"label": "Cost", "tex": "\\mathcal{O}(c_I\\,T) + \\mathcal{O}(k\\,d)", "note": "The indexer still scans history, but with a much smaller constant c_I."}
+      ],
+      "strengths": ["Cuts attention compute at long context.", "Can keep exact lookups on the tokens that matter.", "Index reuse across layers saves further compute."],
+      "weaknesses": ["Selection errors lose information irrecoverably in that layer.", "Top-k operations are harder to vectorize than dense matrix products.", "Variable index sets complicate batching."],
+      "limitations": ["Keys or index features usually must still be stored for all tokens.", "Compute savings do not automatically reduce memory."],
+      "caveats": ["Implementations differ widely between publishers.", "Quality depends on the indexer, so evaluate retrieval-heavy tasks directly."]
+    },
+    "gated": {
+      "scene": "attention",
+      "controls": [
+        {"id": "tokens", "min": 8, "max": 32, "step": 1, "value": 20},
+        {"id": "position", "min": 1, "max": 31, "step": 1, "value": 14},
+        {"id": "gate", "min": 0, "max": 100, "step": 1, "value": 60},
+        {"id": "queryHeads", "min": 2, "max": 128, "step": 2, "value": 8},
+        {"id": "kvHeads", "min": 1, "max": 32, "step": 1, "value": 4}
+      ],
+      "math": [
+        {"label": "Gate", "tex": "g(x) = \\sigma(W_g\\, x) \\in (0, 1)^{d}", "note": "A learned sigmoid gate is computed from the input."},
+        {"label": "Gated output", "tex": "y = g(x) \\odot A(Q, K, V)", "note": "Each output element is scaled independently."},
+        {"label": "Why it helps", "tex": "\\sum_j \\alpha_{tj} = 1 \\;\\Rightarrow\\; \\text{softmax cannot output zero, but } g \\text{ can}", "note": "Softmax must assign its full mass somewhere, while a gate can suppress the output."}
+      ],
+      "strengths": ["Removes the need for attention sinks in many setups.", "Adds non-linearity to the attention path.", "Low overhead compared with the attention operation."],
+      "weaknesses": ["Adds parameters and a small compute cost to each head.", "Requires custom kernels for best performance.", "Gate saturation can suppress useful signal."],
+      "limitations": ["Does not reduce cache or lookup cost by itself.", "Fast attention kernels need modification to include the gate."],
+      "caveats": ["Gated variants differ in where the gate sits and how it is parameterized.", "Quantization may affect gate calibration, so test quantized checkpoints."]
+    },
+    "mla": {
+      "scene": "attention",
+      "controls": [
+        {"id": "tokens", "min": 8, "max": 32, "step": 1, "value": 20},
+        {"id": "position", "min": 1, "max": 31, "step": 1, "value": 14},
+        {"id": "queryHeads", "min": 2, "max": 128, "step": 2, "value": 16},
+        {"id": "latentRank", "min": 64, "max": 1024, "step": 32, "value": 512},
+        {"id": "headDim", "min": 16, "max": 256, "step": 16, "value": 128}
+      ],
+      "math": [
+        {"label": "Latent compression", "tex": "c_t = W^{DKV} h_t \\in \\mathbb{R}^{r}", "note": "Only the latent vector of rank r is stored in the cache."},
+        {"label": "Reconstruction", "tex": "k_t^{(i)} = W_i^{UK} c_t, \\qquad v_t^{(i)} = W_i^{UV} c_t", "note": "Keys and values for each head are decoded when attention runs."},
+        {"label": "Cache ratio", "tex": "\\frac{C_{\\text{MLA}}}{C_{\\text{MHA}}} = \\frac{r}{2\\,h\\,d_h}", "note": "With r far below 2·h·d_h, the cache shrinks dramatically."}
+      ],
+      "strengths": ["Very small cache per token.", "Allows many query heads without proportional cache growth.", "Efficient kernels can attend directly in latent space."],
+      "weaknesses": ["Low-rank keys and values constrain expressiveness.", "Decoding adds compute if kernels are not optimized.", "Quantization of latent projections needs care."],
+      "limitations": ["Needs dedicated kernels to be efficient on target hardware.", "Rank is fixed at training time."],
+      "caveats": ["Cache savings do not change weight memory.", "Effective throughput depends on the runtime's MLA path, so benchmark it."]
+    },
+    "gqa": {
+      "scene": "attention",
+      "controls": [
+        {"id": "tokens", "min": 8, "max": 32, "step": 1, "value": 20},
+        {"id": "position", "min": 1, "max": 31, "step": 1, "value": 14},
+        {"id": "queryHeads", "min": 2, "max": 128, "step": 2, "value": 16},
+        {"id": "kvHeads", "min": 1, "max": 32, "step": 1, "value": 4},
+        {"id": "headDim", "min": 16, "max": 256, "step": 16, "value": 128}
+      ],
+      "math": [
+        {"label": "Head grouping", "tex": "A_i = A\\big(Q_i,\\, K_{\\gamma(i)},\\, V_{\\gamma(i)}\\big), \\quad \\gamma(i) = \\lfloor i\\,g / h \\rfloor", "note": "h query heads share g key-value heads."},
+        {"label": "Cache", "tex": "C = 2\\,g\\,d_h\\,b \\;\\text{ bytes per token per layer}", "note": "Cache depends on g and not on h."},
+        {"label": "Saving", "tex": "\\frac{C_{\\text{GQA}}}{C_{\\text{MHA}}} = \\frac{g}{h}", "note": "Multi-query attention is the extreme case g = 1."}
+      ],
+      "strengths": ["Direct cache and memory-bandwidth reduction.", "Near-parity quality with MHA at moderate ratios in published results.", "Universal runtime support."],
+      "weaknesses": ["Cache still grows linearly with context.", "Extreme ratios can reduce quality.", "Groups share keys, so heads are less independent."],
+      "limitations": ["Does not reduce the number of tokens attended to.", "Long context remains expensive without windowing or linear layers."],
+      "caveats": ["The query-to-KV ratio can differ by layer type, so read the config.", "Compare models at their real head counts rather than by name."]
+    },
+    "mha": {
+      "scene": "attention",
+      "controls": [
+        {"id": "tokens", "min": 8, "max": 32, "step": 1, "value": 16},
+        {"id": "position", "min": 1, "max": 31, "step": 1, "value": 10},
+        {"id": "queryHeads", "min": 2, "max": 64, "step": 2, "value": 8},
+        {"id": "headDim", "min": 16, "max": 256, "step": 16, "value": 64}
+      ],
+      "math": [
+        {"label": "Scaled dot-product", "tex": "A(Q,K,V) = \\operatorname{softmax}\\!\\Big(\\frac{QK^{\\top}}{\\sqrt{d_h}}\\Big) V", "note": "Scaling by the square root of head size keeps softmax out of saturation."},
+        {"label": "Multi-head", "tex": "\\mathrm{MHA}(x) = W_O\\,\\big[A_1 \\,\\|\\, \\cdots \\,\\|\\, A_h\\big], \\quad d_h = d / h", "note": "Heads attend independently and are concatenated."},
+        {"label": "Cache", "tex": "C = 2\\,h\\,d_h\\,b = 2\\,d\\,b \\;\\text{ bytes per token per layer}", "note": "Each head stores its own keys and values."}
+      ],
+      "strengths": ["Exact and fully expressive attention.", "Simplest implementation with the broadest support.", "Well-understood behaviour."],
+      "weaknesses": ["Largest cache of the attention types here.", "Memory bandwidth limits long-context generation.", "Generation over a sequence has quadratic total attention cost."],
+      "limitations": ["Long context is rarely affordable without cache-reduction methods.", "Attention sinks appear naturally and affect streaming."],
+      "caveats": ["Few recent models use plain MHA, so it mostly serves as a baseline.", "Sizing guidance for MHA overestimates newer models."]
+    },
+    "qknorm": {
+      "scene": "attention",
+      "controls": [
+        {"id": "tokens", "min": 8, "max": 32, "step": 1, "value": 20},
+        {"id": "position", "min": 1, "max": 31, "step": 1, "value": 14},
+        {"id": "normalize", "min": 0, "max": 1, "step": 1, "value": 1, "toggle": true},
+        {"id": "keyScale", "min": 20, "max": 400, "step": 10, "value": 250},
+        {"id": "queryHeads", "min": 2, "max": 64, "step": 2, "value": 8},
+        {"id": "kvHeads", "min": 1, "max": 32, "step": 1, "value": 2}
+      ],
+      "math": [
+        {"label": "Normalization", "tex": "\\hat q = \\frac{\\mathrm{LN}(q)}{\\sqrt{d_h}}, \\qquad \\hat k = \\frac{\\mathrm{LN}(k)}{\\sqrt{d_h}}", "note": "Queries and keys are normalized before comparison."},
+        {"label": "Bounded score", "tex": "|\\hat q^{\\top} \\hat k| \\le \\|\\hat q\\|\\,\\|\\hat k\\|", "note": "By Cauchy-Schwarz, normalized vectors keep logits in a controlled range."},
+        {"label": "Failure avoided", "tex": "\\|q\\|\\|k\\| \\gg 1 \\;\\Rightarrow\\; \\operatorname{softmax} \\to \\text{one-hot}", "note": "Unbounded logits saturate softmax and destabilize training."}
+      ],
+      "strengths": ["Stabilizes training at large scale.", "Cheap to compute.", "Reduces extreme attention logits."],
+      "weaknesses": ["Adds a normalization step to each attention call.", "Can limit attention sharpness if the scale is poorly chosen.", "Variants are not numerically interchangeable."],
+      "limitations": ["Does not change cache size or lookup count.", "Mainly a training benefit."],
+      "caveats": ["Runtimes must implement the exact normalization, or quality silently degrades.", "Check the config when converting between frameworks."]
+    },
+    "position": {
+      "scene": "attention",
+      "controls": [
+        {"id": "tokens", "min": 8, "max": 32, "step": 1, "value": 20},
+        {"id": "position", "min": 1, "max": 31, "step": 1, "value": 14},
+        {"id": "rope", "min": 0, "max": 1, "step": 1, "value": 1, "toggle": true},
+        {"id": "rotation", "min": 5, "max": 90, "step": 5, "value": 30},
+        {"id": "queryHeads", "min": 2, "max": 64, "step": 2, "value": 8},
+        {"id": "kvHeads", "min": 1, "max": 32, "step": 1, "value": 2}
+      ],
+      "math": [
+        {"label": "Rotary embedding", "tex": "\\tilde q_m = e^{\\,i m \\theta_j} q_m, \\qquad \\theta_j = 10000^{-2j/d}", "note": "Each pair of dimensions is rotated by an angle proportional to position m."},
+        {"label": "Relative position", "tex": "\\langle \\tilde q_m, \\tilde k_n \\rangle = \\operatorname{Re}\\!\\big[\\, q_m \\bar k_n\\, e^{\\,i (m-n)\\theta_j} \\big]", "note": "The score depends only on the distance m - n."},
+        {"label": "NoPE", "tex": "M_{tj} = \\mathbb{1}[\\,j < t\\,]", "note": "Without an explicit embedding, order information comes from the causal mask alone."}
+      ],
+      "strengths": ["RoPE has no stored position table.", "Relative-position behaviour generalizes across lengths.", "Very low compute."],
+      "weaknesses": ["High-frequency components can alias at long distance.", "Long context may need scaled or partial RoPE.", "NoPE gives weaker explicit distance information."],
+      "limitations": ["Extending context beyond training length usually degrades quality.", "Interpolation schemes such as YaRN are approximations."],
+      "caveats": ["Advertised long contexts may rely on position scaling that was not used in training.", "Runtimes must match the exact RoPE variant and base frequency."]
+    }
+  }
+}

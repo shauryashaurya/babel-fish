@@ -1,0 +1,15 @@
+{
+ "note": "Example workloads to start from. They are illustrations, not measurements; replace every figure with your own traffic.",
+ "presets": [
+  {"id": "assistant", "name": "Customer-support assistant", "text": "Short conversations with a long, stable system prompt and tool definitions.",
+   "workload": {"requestsPerMonth": 1000000, "inputTokens": 3000, "outputTokens": 400, "cacheablePct": 70, "cacheHitPct": 85, "batchPct": 0, "peakFactor": 3, "growthPct": 5}},
+  {"id": "rag", "name": "Internal knowledge Q&A (RAG)", "text": "Each question carries retrieved passages that change from request to request.",
+   "workload": {"requestsPerMonth": 200000, "inputTokens": 8000, "outputTokens": 600, "cacheablePct": 25, "cacheHitPct": 70, "batchPct": 0, "peakFactor": 4, "growthPct": 8}},
+  {"id": "coding", "name": "Coding agent", "text": "Counted per model call. Long, mostly repeated context; each call adds a little.",
+   "workload": {"requestsPerMonth": 300000, "inputTokens": 40000, "outputTokens": 1500, "cacheablePct": 90, "cacheHitPct": 90, "batchPct": 0, "peakFactor": 2.5, "growthPct": 10}},
+  {"id": "extraction", "name": "Document extraction (overnight)", "text": "High volume, no one waiting: suited to batch processing.",
+   "workload": {"requestsPerMonth": 2000000, "inputTokens": 6000, "outputTokens": 800, "cacheablePct": 20, "cacheHitPct": 80, "batchPct": 100, "peakFactor": 1.5, "growthPct": 3}},
+  {"id": "contracts", "name": "Long-contract review", "text": "Few requests, each carrying a whole contract.",
+   "workload": {"requestsPerMonth": 20000, "inputTokens": 300000, "outputTokens": 4000, "cacheablePct": 10, "cacheHitPct": 50, "batchPct": 50, "peakFactor": 2, "growthPct": 2}}
+ ]
+}

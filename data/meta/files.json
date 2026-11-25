@@ -1,0 +1,97 @@
+[
+  {
+    "path": "catalog/license_rules.json",
+    "bytes": 14364,
+    "sha256": "1102f0191977ea1ed94467070a6e3cf67127bfa94bcbcf3f352f75ac1ee3f448"
+  },
+  {
+    "path": "catalog/models.json",
+    "bytes": 460566,
+    "sha256": "80342427d7aade16f0cc4d6341f72e02b7ed2a18c6634f63bc012a578cd168e9"
+  },
+  {
+    "path": "catalog/published_configs.json",
+    "bytes": 12118,
+    "sha256": "57389bd22907385bc7ee783bc1adb721a899e581a0e0d31c5988a3d5642528cb"
+  },
+  {
+    "path": "catalog/slm_candidates.json",
+    "bytes": 199057,
+    "sha256": "deae2c17a5ea946a8e8e8a120adccd12d003a6c2477b8ca452fdd60141b353f7"
+  },
+  {
+    "path": "content/agent_concepts.json",
+    "bytes": 70981,
+    "sha256": "d4ba20fc0472d7da074e271a6666e1493e5ef3f4c3ccd2c4617e4955d820b243"
+  },
+  {
+    "path": "content/agents.json",
+    "bytes": 54291,
+    "sha256": "5a362ae3444843d6dd02d63084a74fbf087de2e39039970fe0c55f70c0270375"
+  },
+  {
+    "path": "content/architecture_details.json",
+    "bytes": 35293,
+    "sha256": "dabfbce03f83355473b0cb236f56f5529904b46708abf2cdfd3927906fe845a4"
+  },
+  {
+    "path": "content/architectures.json",
+    "bytes": 16151,
+    "sha256": "fda99227fd73010b1bbce09a002f72a9f33858e44a055a9c2cdf62e9904575c0"
+  },
+  {
+    "path": "content/compare.json",
+    "bytes": 35123,
+    "sha256": "04eb740d15ac6bb6b10ddf7fa2f0407414e695bc44742083dd0022d27a03d4c4"
+  },
+  {
+    "path": "content/copy.json",
+    "bytes": 147740,
+    "sha256": "6222d2b29f9c64aaaff5420f2f9aa9afe9262cbe55befea7564c5dbb981ad290"
+  },
+  {
+    "path": "content/explainers.json",
+    "bytes": 22333,
+    "sha256": "87fe3a6be7d8998c1d6d0cfe740d340e3ce7d8eca3baa86b5e6fdf74d4b4fc08"
+  },
+  {
+    "path": "content/finetuning.json",
+    "bytes": 20223,
+    "sha256": "2631a4ba1123173984b56a0697ef31287588414fd7d4972ccccf1b7323284d4c"
+  },
+  {
+    "path": "content/rag.json",
+    "bytes": 75440,
+    "sha256": "da0035ab25e1dcc139fbb163ecf97bb2de1d8916445de921cd37d90fc9e04f23"
+  },
+  {
+    "path": "finops/api_models.json",
+    "bytes": 10743,
+    "sha256": "d7e072512e43793aac428121e264eb9b4688bf56e620e1de47be481054fed18f"
+  },
+  {
+    "path": "finops/infrastructure_prices.json",
+    "bytes": 5678,
+    "sha256": "b0d0eee918324ad88003f86ef764ba413e654fb5299e9cc833df190d6fffabe5"
+  },
+  {
+    "path": "finops/workloads.json",
+    "bytes": 1711,
+    "sha256": "4eb590fa726f3baf3ba2a3a10fa00ea55e9dad7a9f11b6a81ff938e3f4cb9203"
+  },
+  {
+    "path": "infrastructure/cloud_instances.json",
+    "bytes": 8307,
+    "sha256": "421d6a04eabd8a4d4b712f6316cc1aca2a7f4a1a93d16380873f55a33ee25d92"
+  },
+  {
+    "path": "infrastructure/devices.json",
+    "bytes": 2520,
+    "sha256": "66c88d0db46ffc7743de89135f3d9728d0deb5caae4f953475add2dd49f4790f"
+  },
+  {
+    "path": "meta/manifest.json",
+    "bytes": 200,
+    "sha256": "3d6666beecfbd299f94a4ecd9834a890a5aa9a59741fc11ee9804a91fb3bf890"
+  }
+]
